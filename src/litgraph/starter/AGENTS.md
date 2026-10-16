@@ -6,4 +6,3 @@ what kind of help you want. The agent reads this before every answer. For exampl
 - The research problem and why it matters.
 - Terminology rules (which names to use, what to define).
 - What counts as a good addition to the graph (and what does not).
-- Preferred language for answers.

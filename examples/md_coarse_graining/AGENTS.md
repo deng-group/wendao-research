@@ -13,8 +13,8 @@ seven method families, A to G. Keep that classification when adding papers: ever
 
 ## Terminology
 
-- Use standard scientific terminology only; do not coin shorthand or metaphors. Keep technical terms in
-  English even when answering in Chinese (geometry optimization, collective variable, Markov state model).
+- Use standard scientific terminology only; do not coin shorthand or metaphors (geometry optimization,
+  collective variable, Markov state model).
 - Define a quantity the first time it appears (formula or a one-line operational definition) and keep the
   same name afterwards. Say what an offset, width or neighbour is relative to.
 - Separate a measured quantity, a hypothesis and an interpretation; label interpretations as such.
@@ -31,6 +31,6 @@ seven method families, A to G. Keep that classification when adding papers: ever
 
 ## Answers
 
-Answer in the language I write in. Lead with the answer; short paragraphs; lists for parallel items. When
+Always answer in English, even if I write in Chinese. Lead with the answer; short paragraphs; lists for parallel items. When
 you use a node, cite its id in square brackets so the interface can link it. Say what the graph does not
 cover instead of guessing.
