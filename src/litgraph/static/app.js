@@ -42,7 +42,7 @@ const el = {
 const state = {
   graph: null, nodeTypes: {}, edgeTypes: {}, nodesById: new Map(), edgesByNode: new Map(),
   sim: null, alpha: 1, alphaTarget: 0, frame: null, homesSet: false, fitPending: true,
-  hiddenKinds: new Set(), hoverId: null, selectedId: null, transform: { x: 0, y: 0, k: 1 }, size: null, ratio: 1,
+  hiddenKinds: new Set(), hoverId: null, selectedId: null, pinnedId: null, transform: { x: 0, y: 0, k: 1 }, size: null, ratio: 1,
   pointer: null, viewTouched: false, colours: null, lastFocus: null, focusSince: 0, labelled: new Set(),
   health: { ai: false, model: "" }, busy: null, chatOpen: true, autoFollow: true, pendingLinks: [], editingId: null, highlight: new Set(),
 };
@@ -230,7 +230,7 @@ function resizeCanvas() {
   draw();
 }
 function draw() { if (state.drawQueued) return; state.drawQueued = true; requestAnimationFrame(() => { state.drawQueued = false; render(); }); }
-const focusId = () => state.hoverId || state.selectedId;
+const focusId = () => state.hoverId || state.pinnedId || state.selectedId;
 
 function render() {
   if (!state.sim || !state.colours) return;
@@ -300,6 +300,12 @@ function render() {
   }
   const selected = state.selectedId && state.sim.byId.get(state.selectedId);
   if (selected && isShownNode(selected)) { context.globalAlpha = 1; context.lineWidth = 2.5 / k; context.strokeStyle = state.colours.text; context.beginPath(); context.arc(selected.x, selected.y, selected.r + 3 / k, 0, Math.PI * 2); context.stroke(); }
+  const pinned = state.pinnedId && state.sim.byId.get(state.pinnedId);
+  if (pinned && isShownNode(pinned)) {
+    context.globalAlpha = 1; context.strokeStyle = state.colours.linkActive; context.lineWidth = 2 / k;
+    context.beginPath(); context.arc(pinned.x, pinned.y, pinned.r + 7 / k, 0, Math.PI * 2); context.stroke();
+    context.lineWidth = 1 / k; context.beginPath(); context.arc(pinned.x, pinned.y, pinned.r + 10.5 / k, 0, Math.PI * 2); context.stroke();
+  }
   drawLabels(context, nodes, near, focus, onScreen);
   context.globalAlpha = 1;
 }
@@ -429,14 +435,19 @@ function buildLegend() {
     const dot = document.createElement("i"); dot.style.background = `var(--c-${type})`;
     button.append(dot, `${LEVEL_NUMBER[type]} ${state.nodeTypes[type] || type} `); const count = document.createElement("small"); count.textContent = counts.get(type) || 0; button.appendChild(count);
     button.addEventListener("click", () => {
-      if (state.hiddenKinds.has(type)) state.hiddenKinds.delete(type); else if (state.hiddenKinds.size < TYPE_ORDER.length - 1) state.hiddenKinds.add(type);
+      if (state.hiddenKinds.has(type)) state.hiddenKinds.delete(type); else state.hiddenKinds.add(type);
       state.shown = null; buildLegend(); startPhysics(0.5); if (!state.viewTouched) setTimeout(fitGraph, 400);
     });
     el.legend.appendChild(button);
   }
-  const only = document.createElement("button"); only.type = "button"; only.className = "legend-reset"; only.textContent = "All";
-  only.title = "Show every level"; only.addEventListener("click", () => { state.hiddenKinds.clear(); state.shown = null; buildLegend(); startPhysics(0.4); });
-  el.legend.appendChild(only);
+  const allShown = state.hiddenKinds.size === 0;
+  const toggle = document.createElement("button"); toggle.type = "button"; toggle.className = "legend-reset"; toggle.textContent = allShown ? "None" : "All";
+  toggle.title = allShown ? "Hide every level, then pick the ones to show" : "Show every level";
+  toggle.addEventListener("click", () => {
+    if (allShown) for (const type of TYPE_ORDER) state.hiddenKinds.add(type); else state.hiddenKinds.clear();
+    state.shown = null; buildLegend(); startPhysics(0.4); if (!state.viewTouched) setTimeout(fitGraph, 400);
+  });
+  el.legend.appendChild(toggle);
 }
 function showSearchResults(query) {
   const needle = query.trim().toLowerCase();
@@ -465,17 +476,28 @@ document.addEventListener("keydown", (event) => {
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") { event.preventDefault(); el.search.focus(); }
   if (event.key === "Escape" && !el.card.hidden && !el.dialog.open) clearSelection();
 });
-$("#reset-view").addEventListener("click", () => { state.hiddenKinds.clear(); state.shown = null; buildLegend(); clearSelection(); fitGraph(); });
+$("#reset-view").addEventListener("click", () => { state.hiddenKinds.clear(); state.shown = null; buildLegend(); setPinned(null); clearSelection(); fitGraph(); });
 
 // ---------- the node card ----------
 function selectNode(nodeId, options = {}) {
   const node = state.nodesById.get(nodeId); if (!node) return;
+  if (options.toggle && state.selectedId === nodeId && !el.card.hidden) { setPinned(state.pinnedId === nodeId ? null : nodeId); return; }
   if (state.hiddenKinds.delete(node.type)) { state.shown = null; buildLegend(); }
   state.selectedId = nodeId; showNodeCard(node); updateContext(); updateSuggestions(node);
-  if (options.fit) focusOn(nodeId);
+  if (options.fit && !state.pinnedId) focusOn(nodeId);
   draw();
 }
 function clearSelection() { state.selectedId = null; el.card.hidden = true; updateContext(); updateSuggestions(null); draw(); }
+// Pin a node: the view and the highlighted neighbourhood stay on it while other nodes are looked at.
+function setPinned(nodeId) {
+  state.pinnedId = nodeId;
+  const pin = $("#pin-node"); const node = nodeId && state.nodesById.get(nodeId);
+  if (pin) { pin.textContent = state.selectedId && state.selectedId === nodeId ? "Unpin" : "Pin"; pin.classList.toggle("active", Boolean(nodeId) && state.selectedId === nodeId); }
+  const chip = $("#pinned-chip");
+  if (chip) { chip.hidden = !node; if (node) chip.querySelector("b").textContent = shortLabel(node); }
+  if (node) focusOn(nodeId);
+  draw();
+}
 function chip(node, extra = "") {
   const button = document.createElement("button"); button.type = "button"; button.className = "chip"; button.title = node.summary || node.label;
   const dot = document.createElement("i"); dot.className = "dot"; dot.style.background = `var(--c-${node.type})`;
@@ -537,11 +559,14 @@ function showNodeCard(node) {
     el.links.appendChild(group);
   }
   el.confirm.hidden = node.status !== "proposed";
+  const pin = $("#pin-node"); pin.textContent = state.pinnedId === node.id ? "Unpin" : "Pin"; pin.classList.toggle("active", state.pinnedId === node.id);
   const offline = Boolean(EXPORTED);
   el.explain.hidden = offline; el.expand.hidden = offline; el.edit.hidden = offline; el.remove.hidden = offline; el.confirm.hidden = offline || node.status !== "proposed";
   el.card.hidden = false;
 }
 $("#close-node-card").addEventListener("click", clearSelection);
+$("#pin-node").addEventListener("click", () => { if (state.selectedId) setPinned(state.pinnedId === state.selectedId ? null : state.selectedId); });
+$("#pinned-chip").addEventListener("click", () => setPinned(null));
 el.explain.addEventListener("click", () => { const node = state.nodesById.get(state.selectedId); if (node) askAbout(node, `Explain ${shortLabel(node)} [${node.id}] using the graph: what it is, what it learns or assumes and discards, which claims and quantities it bears on, and what is uncertain. Then say whether the graph's record of it should be improved.`); });
 el.expand.addEventListener("click", () => { const node = state.nodesById.get(state.selectedId); if (node) askAbout(node, `Search the literature for work closely related to ${shortLabel(node)} [${node.id}] (papers that extend it, apply it to ion transport in solids, or compare against it). Pick at most four that matter for the research question, say why each matters, and add them to the graph: each with its family, the techniques it uses, learns / discards / validated_at, and any claim it supports or contradicts.`); });
 el.confirm.addEventListener("click", async () => { const id = state.selectedId; if (id) { await api("/api/graph/status", { ids: [id], status: "confirmed" }); } });
@@ -652,7 +677,7 @@ async function reloadGraph(options = {}) {
 // ---------- chat ----------
 function setChatOpen(open) {
   state.chatOpen = open; el.shell.classList.toggle("chat-is-open", open); el.chat.hidden = !open; el.openChat.hidden = open;
-  requestAnimationFrame(() => { if (state.graph) { resizeCanvas(); if (!state.viewTouched) fitGraph(); } });
+  requestAnimationFrame(() => { if (state.graph) { resizeCanvas(); if (state.pinnedId) focusOn(state.pinnedId); else if (!state.viewTouched) fitGraph(); } });
 }
 el.openChat.addEventListener("click", () => setChatOpen(true)); el.closeChat.addEventListener("click", () => setChatOpen(false));
 function readMemory() { try { const parsed = JSON.parse(sessionStorage.getItem(MEMORY_KEY) || "[]"); return Array.isArray(parsed) ? parsed.slice(-MAX_MEMORY) : []; } catch { return []; } }

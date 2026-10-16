@@ -54,6 +54,10 @@ kbd { padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; color
 .graph-stage { position: absolute; inset: 70px 0 0; overflow: hidden; }
 .graph-hint { position: absolute; top: 16px; left: 22px; display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: .76rem; pointer-events: none; }
 .graph-hint span { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+.pinned-chip { position: absolute; top: 40px; left: 22px; display: inline-flex; align-items: center; gap: 6px; max-width: 360px; padding: 4px 9px; border: 1px solid var(--accent-line); border-radius: 999px; color: var(--accent-strong); background: var(--accent-soft); cursor: pointer; font-size: .74rem; }
+.pinned-chip span { color: var(--muted); font-size: .66rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.pinned-chip b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .pinned-chip i { font-style: normal; color: var(--muted); }
+.ask-node.active { border-color: var(--accent); color: var(--on-accent); background: var(--accent); }
 .graph-load-error { position: absolute; inset: 0; display: grid; place-items: center; padding: 32px; color: var(--danger); text-align: center; }
 .legend { position: absolute; left: 22px; bottom: 18px; display: flex; flex-wrap: wrap; gap: 4px; max-width: calc(100% - 44px); padding: 6px 8px; border: 1px solid var(--line); border-radius: 10px; background: color-mix(in srgb, var(--panel) 88%, transparent); backdrop-filter: blur(10px); font-size: .74rem; }
 .legend button { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border: 0; border-radius: 7px; color: var(--muted); background: transparent; cursor: pointer; font-size: .76rem; }
