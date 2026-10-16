@@ -102,6 +102,7 @@ class ClaudeCodeAgent(Agent):
         options = self._options(system, tools, events)
         answer: list[str] = []
         streamed = False
+        failed = False
         async for message in query(prompt=prompt, options=options):
             if isinstance(message, StreamEvent):
                 if message.parent_tool_use_id:
@@ -133,10 +134,13 @@ class ClaudeCodeAgent(Agent):
                 if message.is_error:
                     detail = "; ".join(message.errors or []) or message.result or message.subtype
                     events.put({"type": "error", "message": f"Claude Code could not answer: {detail}"})
-                    return
+                    failed = True  # keep reading until the generator ends, so it closes cleanly
+                    continue
                 if not answer and message.result:
                     answer.append(message.result)
                     events.put({"type": "delta", "text": message.result})
+        if failed:
+            return
         events.put({"type": "done", "answer": "".join(answer).strip(), "proposals": proposals,
                     "graph_version": self.graph_file.path.stat().st_mtime if self.graph_file.path.exists() else 0})
 
