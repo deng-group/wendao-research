@@ -719,7 +719,37 @@ function addProposal(proposal) {
   for (const id of proposal.added_nodes) state.highlight.add(id);
 }
 
-// Markdown, with [node:id] references turned into chips that select the node.
+// How a node is cited in prose, as in a paper: Author et al. (year) for a paper, the name for a technique or
+// quantity, "family B" for a family, a short form for a claim.
+function citeName(node) {
+  if (node.type === "paper") {
+    const raw = String(node.authors || "").replace(/\s+and\s+/g, " & ");
+    let who;
+    if (/et al/i.test(raw)) who = `${raw.split(/[,&]| et al/i)[0].trim()} et al.`;
+    else {
+      const names = raw.split(/\s*[,&]\s*/).filter(Boolean).map((name) => name.trim().split(/\s+/).pop());
+      who = names.length <= 1 ? names[0] || node.label.split(":")[0] : names.length === 2 ? `${names[0]} & ${names[1]}` : `${names[0]} et al.`;
+    }
+    return node.year ? `${who} (${node.year})` : who;
+  }
+  if (node.type === "family") { const m = node.label.match(/^([A-Z])\./); return m ? `family ${m[1]}` : node.label; }
+  if (node.type === "claim") { const words = node.label.split(/\s+/); return words.length > 8 ? `${words.slice(0, 8).join(" ")}…` : node.label; }
+  return node.label.replace(/\s*\([^)]*\)\s*$/, "");
+}
+// A reference chip: the citation, or only a link mark when the words before it already name the node.
+function referenceChip(node, before) {
+  const name = citeName(node);
+  const low = before.toLowerCase();
+  // a claim is usually paraphrased ("the claim that ..."), so the word "claim" just before it counts as naming it
+  const already = low.includes(name.toLowerCase()) || low.includes(node.label.toLowerCase().slice(0, 24)) || (node.type === "claim" && /claim/.test(low.slice(-60)));
+  const b = document.createElement("button"); b.type = "button"; b.className = `node-ref${already ? " bare" : ""}`; b.title = node.label;
+  const dot = document.createElement("i"); dot.className = "dot"; dot.style.background = `var(--c-${node.type})`;
+  b.append(dot, already ? "" : name);
+  b.addEventListener("click", () => selectNode(node.id, { fit: true }));
+  return b;
+}
+
+// Markdown, with [node:id] references turned into citation chips that select the node.
 function appendInline(parent, text) {
   const pattern = /(`[^`\n]+`|\*\*[^*\n]+\*\*|\[[^\]\n]+\]\(https?:\/\/[^)\s]+\)|\[[a-z]+:[a-z0-9][a-z0-9-]*\]|\*[^*\n]+\*)/g;
   let cursor = 0;
@@ -731,7 +761,7 @@ function appendInline(parent, text) {
     else if (token.startsWith("[")) {
       const link = token.match(/^\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)$/); const ref = token.slice(1, -1);
       if (link) { const a = document.createElement("a"); a.href = link[2]; a.target = "_blank"; a.rel = "noopener noreferrer"; appendInline(a, link[1]); parent.appendChild(a); }
-      else if (state.nodesById.has(ref)) { const node = state.nodesById.get(ref); const b = document.createElement("button"); b.type = "button"; b.className = "node-ref"; b.textContent = "↗ graph"; b.title = node.label; b.addEventListener("click", () => selectNode(ref, { fit: true })); parent.appendChild(b); }
+      else if (state.nodesById.has(ref)) parent.appendChild(referenceChip(state.nodesById.get(ref), text.slice(Math.max(0, match.index - 80), match.index)));
       else parent.appendChild(document.createTextNode(token));
     } else { const em = document.createElement("em"); appendInline(em, token.slice(1, -1)); parent.appendChild(em); }
     cursor = match.index + token.length;

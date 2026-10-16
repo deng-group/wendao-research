@@ -124,7 +124,9 @@ kbd { padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; color
 .message-body pre { overflow: auto; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); } .message-body pre code { padding: 0; background: transparent; font-size: .78rem; }
 .message-body blockquote { margin: 8px 0 10px; padding: 6px 10px; border-left: 3px solid var(--accent-line); color: var(--muted); background: var(--accent-soft); }
 .message-body table { border-collapse: collapse; margin: 6px 0 10px; font-size: .8rem; } .message-body td, .message-body th { padding: 4px 8px; border: 1px solid var(--line); }
-.node-ref { display: inline; padding: 1px 6px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel-2); cursor: pointer; font-size: .9em; }
+.node-ref { display: inline-flex; align-items: center; gap: 5px; vertical-align: baseline; padding: 0 7px 0 5px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel-2); cursor: pointer; font-size: .86em; line-height: 1.5; white-space: nowrap; }
+.node-ref.bare { padding: 0 4px; gap: 0; }
+.node-ref .dot { width: 7px; height: 7px; }
 .node-ref:hover { border-color: var(--accent-line); background: var(--accent-soft); }
 .assistant-avatar { flex: 0 0 auto; display: grid; place-items: center; width: 26px; height: 26px; border: 1px solid var(--accent-line); border-radius: 8px; color: var(--accent); background: var(--accent-soft); font-size: .68rem; font-weight: 900; }
 .message.user { justify-content: flex-end; }
