@@ -5,6 +5,8 @@ description = "From accelerated MD and ML coarse-graining to generative dynamics
 [model]
 provider = "claude-code"   # or "anthropic" with ANTHROPIC_API_KEY in .env
 # name = "claude-opus-5-5"
+# ignore_anthropic_env = true   # claude-code: ignore ANTHROPIC_BASE_URL / _AUTH_TOKEN / _MODEL from your shell
+#                               # (e.g. a relay to another model) and use the Claude Code sign-in itself
 effort = "medium"
 max_tokens = 16000
 

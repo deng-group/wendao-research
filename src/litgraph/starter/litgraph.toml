@@ -8,6 +8,8 @@ description = "What this graph is about, in a sentence."
 # provider = "anthropic": the Messages API with an API key in .env (ANTHROPIC_API_KEY), billed per token.
 provider = "claude-code"
 # name = "claude-opus-5-5"
+# ignore_anthropic_env = true   # claude-code: ignore ANTHROPIC_BASE_URL / _AUTH_TOKEN / _MODEL from your shell
+#                               # (e.g. a relay to another model) and use the Claude Code sign-in itself
 effort = "medium"      # low | medium | high | xhigh | max: how hard the model thinks per answer
 max_tokens = 16000
 # fallbacks = false    # Anthropic's server-side refusal fallback (beta)

@@ -8,6 +8,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 DEFAULT_MODEL = "claude-opus-5-5"
+# Shell variables that redirect Claude Code away from its own sign-in: a relay (base URL), its token, a model.
+ANTHROPIC_ENV = ("ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY", "ANTHROPIC_MODEL",
+                 "ANTHROPIC_DEFAULT_OPUS_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+                 "ANTHROPIC_SMALL_FAST_MODEL")
 STARTER_DIR = Path(__file__).parent / "starter"
 
 
@@ -35,6 +39,7 @@ class Workspace:
     model: str = DEFAULT_MODEL
     model_configured: bool = False   # a model named in litgraph.toml (else the provider's default)
     cli_path: str = ""               # claude-code: path to the Claude Code CLI, if not the bundled one
+    ignore_anthropic_env: bool = False  # claude-code: drop ANTHROPIC_* variables so Claude Code uses its own sign-in
     effort: str = "medium"
     max_tokens: int = 16000
     web_search: bool = True          # Anthropic's server-side web search and web fetch tools
@@ -80,6 +85,7 @@ class Workspace:
             model=os.environ.get("ANTHROPIC_MODEL") or str(model.get("name") or DEFAULT_MODEL),
             model_configured=bool(os.environ.get("ANTHROPIC_MODEL") or model.get("name")),
             cli_path=str(model.get("cli_path", "")),
+            ignore_anthropic_env=bool(model.get("ignore_anthropic_env", False)),
             effort=str(model.get("effort", "medium")),
             max_tokens=int(model.get("max_tokens", 16000)),
             fallbacks=bool(model.get("fallbacks", False)),
@@ -92,7 +98,16 @@ class Workspace:
         )
         if workspace.provider not in ("claude-code", "anthropic"):
             raise ValueError(f"[model] provider must be `claude-code` or `anthropic`, not `{workspace.provider}`.")
+        if workspace.provider == "claude-code" and workspace.ignore_anthropic_env:
+            for key in ANTHROPIC_ENV:
+                os.environ.pop(key, None)
+            workspace.model = str(model.get("name") or DEFAULT_MODEL)
+            workspace.model_configured = bool(model.get("name"))
         return workspace
+
+    def inherited_anthropic_env(self) -> list[str]:
+        """ANTHROPIC_* variables from the shell that Claude Code would follow (a relay, another model, a key)."""
+        return [key for key in ANTHROPIC_ENV if os.environ.get(key)]
 
     def api_key(self) -> str | None:
         return os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")

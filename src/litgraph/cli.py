@@ -38,6 +38,10 @@ def cmd_check(args) -> int:
         print(f"graph.json: {exc}")
         ok = False
     print(f"model: {workspace.model_label()} via {workspace.provider} (effort {workspace.effort})")
+    inherited = workspace.inherited_anthropic_env()
+    if workspace.provider == "claude-code" and inherited:
+        print(f"  Claude Code will follow these shell variables instead of its own sign-in: {', '.join(inherited)}")
+        print("  (set ignore_anthropic_env = true under [model] in litgraph.toml to use the Claude Code sign-in)")
     ready, why = workspace.ai_ready()
     if not ready:
         print(f"  {why} The website works, the chat does not.")

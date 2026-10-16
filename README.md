@@ -81,6 +81,10 @@ With either, the request carries:
 it, then writes it to `graph.json` with status `proposed`. Every write keeps a `graph.backup.json`. With
 `auto_apply = true` in `litgraph.toml` additions go in as confirmed.
 
+If your shell exports `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` or `ANTHROPIC_MODEL` (a relay to another
+model, say), Claude Code follows them instead of its sign-in; `litgraph check` says so. Set
+`ignore_anthropic_env = true` under `[model]` to drop them and use the Claude Code sign-in.
+
 `name` under `[model]` picks the model (unset: Claude Code's default, or `claude-opus-5-5` for the API);
 `effort` controls how hard it thinks. An API key is read from `.env` or the environment (`ANTHROPIC_API_KEY`)
 and only matters for `provider = "anthropic"`.
