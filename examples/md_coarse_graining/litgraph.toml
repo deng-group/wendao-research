@@ -3,7 +3,8 @@ title = "MD coarse-graining and acceleration for ion transport"
 description = "From accelerated MD and ML coarse-graining to generative dynamics models, read against Li-ion transport in solid-state electrolytes."
 
 [model]
-name = "claude-opus-5-5"
+provider = "claude-code"   # or "anthropic" with ANTHROPIC_API_KEY in .env
+# name = "claude-opus-5-5"
 effort = "medium"
 max_tokens = 16000
 

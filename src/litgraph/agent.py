@@ -277,22 +277,23 @@ class Agent:
                "graph_version": self.graph_file.path.stat().st_mtime if self.graph_file.path.exists() else 0}
 
     # ---------- a document into graph changes ----------
-    def extract(self, text: str, title: str = "") -> dict:
-        """Read a document (a review, notes) and return a change set to apply to the graph."""
+    def _extract_schema(self) -> dict:
+        proposal = next(t for t in tool_definitions(self.workspace) if t.get("name") == "propose_graph_changes")
         schema = {
             "type": "object",
-            "properties": {
-                "nodes": tool_definitions(self.workspace)[2]["input_schema"]["properties"]["nodes"],
-                "edges": tool_definitions(self.workspace)[2]["input_schema"]["properties"]["edges"],
-            },
+            "properties": {"nodes": copy.deepcopy(proposal["input_schema"]["properties"]["nodes"]),
+                           "edges": copy.deepcopy(proposal["input_schema"]["properties"]["edges"])},
             "required": ["nodes", "edges"],
             "additionalProperties": False,
         }
-        # Structured outputs need closed schemas.
-        for key in ("nodes", "edges"):
+        for key in ("nodes", "edges"):  # structured outputs need closed schemas
             schema["properties"][key]["items"]["additionalProperties"] = False
             schema["properties"][key]["items"]["required"] = list(schema["properties"][key]["items"]["properties"])
-        instruction = (
+        return schema
+
+    @staticmethod
+    def _extract_instruction(text: str, title: str = "") -> str:
+        return (
             "Read the document and extract a knowledge graph: the research questions and goals it poses, method "
             "families, papers (with year, authors, venue, DOI when given), key concepts, open problems and "
             "applications, and the typed links between them that the document itself states. Give every node a "
@@ -301,10 +302,13 @@ class Agent:
             "not give; never invent metadata.\n\n"
             + (f"# {title}\n\n" if title else "") + text
         )
+
+    def extract(self, text: str, title: str = "") -> dict:
+        """Read a document (a review, notes) and return a change set to apply to the graph."""
         params = {
             "model": self.workspace.model, "max_tokens": max(self.workspace.max_tokens, 32000),
-            "system": self.system(), "messages": [{"role": "user", "content": instruction}],
-            "output_config": {"effort": self.workspace.effort, "format": {"type": "json_schema", "schema": schema}},
+            "system": self.system(), "messages": [{"role": "user", "content": self._extract_instruction(text, title)}],
+            "output_config": {"effort": self.workspace.effort, "format": {"type": "json_schema", "schema": self._extract_schema()}},
         }
         with self.client.messages.stream(**params) as stream:
             response = stream.get_final_message()
@@ -315,3 +319,11 @@ class Agent:
                 if node[key] in (None, "", []):
                     del node[key]
         return change
+
+
+def make_agent(workspace, graph_file: GraphFile, client=None) -> Agent:
+    """The agent for the workspace's provider: `anthropic` (Messages API) or `claude-code` (Claude Code sign-in)."""
+    if workspace.provider == "claude-code":
+        from litgraph.claude_code import ClaudeCodeAgent
+        return ClaudeCodeAgent(workspace, graph_file, client=client)
+    return Agent(workspace, graph_file, client=client)

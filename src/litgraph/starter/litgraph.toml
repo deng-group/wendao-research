@@ -3,8 +3,11 @@ title = "{{TITLE}}"
 description = "What this graph is about, in a sentence."
 
 [model]
-# Any Anthropic model id. The API key goes in .env (ANTHROPIC_API_KEY), never here.
-name = "claude-opus-5-5"
+# provider = "claude-code": answers run through Claude Code, with your own Claude Code sign-in (`claude` CLI,
+#   claude.ai subscription); no API key. Leave `name` unset to use Claude Code's default model.
+# provider = "anthropic": the Messages API with an API key in .env (ANTHROPIC_API_KEY), billed per token.
+provider = "claude-code"
+# name = "claude-opus-5-5"
 effort = "medium"      # low | medium | high | xhigh | max: how hard the model thinks per answer
 max_tokens = 16000
 # fallbacks = false    # Anthropic's server-side refusal fallback (beta)

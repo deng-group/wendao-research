@@ -18,7 +18,7 @@ def cmd_init(args) -> int:
     written = init_workspace(Path(args.directory), args.title)
     for path in written:
         print(f"  wrote {path}")
-    print(f"\nNext: cd {args.directory}; put your Anthropic key in .env (see .env.example); litgraph serve")
+    print(f"\nNext: cd {args.directory}; litgraph serve  (uses your Claude Code sign-in; see litgraph.toml for an API key instead)")
     return 0
 
 
@@ -37,15 +37,26 @@ def cmd_check(args) -> int:
     except (GraphError, FileNotFoundError, json.JSONDecodeError) as exc:
         print(f"graph.json: {exc}")
         ok = False
-    print(f"model: {workspace.model} (effort {workspace.effort})")
-    if not workspace.api_key():
-        print("  no ANTHROPIC_API_KEY in the environment or .env: the website works, the chat does not")
+    print(f"model: {workspace.model_label()} via {workspace.provider} (effort {workspace.effort})")
+    ready, why = workspace.ai_ready()
+    if not ready:
+        print(f"  {why} The website works, the chat does not.")
     elif not args.no_model:
         try:
-            import anthropic
-            client = anthropic.Anthropic()
-            reply = client.messages.create(model=workspace.model, max_tokens=20, messages=[{"role": "user", "content": "Say ok."}])
-            print("  model answered:", "".join(b.text for b in reply.content if b.type == "text").strip()[:40])
+            if workspace.provider == "claude-code":
+                from litgraph.claude_code import ClaudeCodeAgent
+                from litgraph.store import GraphFile
+                agent = ClaudeCodeAgent(workspace, GraphFile(workspace.graph_path))
+                events = list(agent.stream_answer("Reply with the single word ok, and use no tools."))
+                errors = [e["message"] for e in events if e["type"] == "error"]
+                if errors:
+                    raise RuntimeError(errors[0])
+                print("  Claude Code answered:", events[-1].get("answer", "")[:40])
+            else:
+                import anthropic
+                client = anthropic.Anthropic()
+                reply = client.messages.create(model=workspace.model, max_tokens=20, messages=[{"role": "user", "content": "Say ok."}])
+                print("  model answered:", "".join(b.text for b in reply.content if b.type == "text").strip()[:40])
         except Exception as exc:
             print(f"  model check failed: {exc}")
             ok = False
@@ -62,8 +73,9 @@ def cmd_serve(args) -> int:
     host, port = args.host or workspace.host, args.port or workspace.port
     url = f"http://{host}:{port}/"
     print(f"litgraph {__version__}: {workspace.title} at {url}  (Ctrl+C stops)")
-    if not workspace.api_key():
-        print("No ANTHROPIC_API_KEY: the graph works, the chat is off. Put the key in .env.")
+    ready, why = workspace.ai_ready()
+    if not ready:
+        print(f"{why} The graph works, the chat is off.")
     if not args.no_open:
         Timer(0.8, lambda: webbrowser.open(url)).start()
     app.run(host=host, port=port, debug=False, threaded=True)
@@ -71,13 +83,14 @@ def cmd_serve(args) -> int:
 
 
 def cmd_extract(args) -> int:
-    from litgraph.agent import Agent
+    from litgraph.agent import make_agent
     workspace = Workspace.load(args.workspace)
-    if not workspace.api_key():
-        print("No ANTHROPIC_API_KEY: put it in .env.")
+    ready, why = workspace.ai_ready()
+    if not ready:
+        print(why)
         return 1
     graph_file = GraphFile(workspace.graph_path)
-    agent = Agent(workspace, graph_file)
+    agent = make_agent(workspace, graph_file)
     for file in args.files:
         path = Path(file)
         print(f"Reading {path} …")

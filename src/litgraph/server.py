@@ -10,7 +10,7 @@ from pathlib import Path
 from flask import Flask, Response, jsonify, request, send_from_directory, stream_with_context
 
 from litgraph import __version__, literature
-from litgraph.agent import Agent
+from litgraph.agent import make_agent
 from litgraph.store import EDGE_TYPES, NODE_TYPES, GraphError, GraphFile
 from litgraph.workspace import Workspace
 
@@ -40,7 +40,7 @@ def export_page(workspace: Workspace, graph_file: GraphFile) -> str:
 def create_app(workspace: Workspace | None = None, client=None) -> Flask:
     workspace = workspace or Workspace.load()
     graph_file = GraphFile(workspace.graph_path)
-    agent = Agent(workspace, graph_file, client=client)
+    agent = make_agent(workspace, graph_file, client=client)
     proposals: dict[str, dict] = {}
     index_page = render_index(workspace)
     app = Flask(__name__, static_folder=None)
@@ -59,8 +59,9 @@ def create_app(workspace: Workspace | None = None, client=None) -> Flask:
     @app.get("/api/health")
     def health():
         graph = graph_file.graph
-        return jsonify({"ok": True, "version": __version__, "title": workspace.title, "model": workspace.model,
-                        "ai": bool(workspace.api_key()), "web_search": workspace.web_search,
+        ready, why = workspace.ai_ready()
+        return jsonify({"ok": True, "version": __version__, "title": workspace.title, "model": workspace.model_label(),
+                        "provider": workspace.provider, "ai": ready, "ai_message": why, "web_search": workspace.web_search,
                         "literature_search": workspace.literature_search, "auto_apply": workspace.auto_apply,
                         "nodes": len(graph.nodes), "edges": len(graph.edges)})
 
@@ -146,8 +147,9 @@ def create_app(workspace: Workspace | None = None, client=None) -> Flask:
         query = str(payload.get("query", "")).strip()
         if not query:
             return jsonify({"ok": False, "message": "query is required."}), 400
-        if not workspace.api_key():
-            return jsonify({"ok": False, "message": "No ANTHROPIC_API_KEY: put it in the workspace's .env file."}), 503
+        ready, why = workspace.ai_ready()
+        if not ready:
+            return jsonify({"ok": False, "message": why}), 503
 
         def events():
             try:

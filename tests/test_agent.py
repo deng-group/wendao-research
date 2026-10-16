@@ -30,6 +30,7 @@ class AgentTests(unittest.TestCase):
             shutil.copy(EXAMPLE / name, self.folder)
         self.workspace = Workspace.load(self.folder)
         self.workspace.web_search = False
+        self.workspace.provider = "anthropic"  # these tests use the fake Messages API
         self.graph_file = GraphFile(self.workspace.graph_path)
 
     def tearDown(self):

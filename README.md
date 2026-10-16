@@ -33,14 +33,16 @@ pip install -e .              # or `uv sync`
 ```bash
 litgraph init my-field        # a workspace: litgraph.toml, AGENTS.md, graph.json, notes/
 cd my-field
-cp .env.example .env          # put your ANTHROPIC_API_KEY in .env
 # either write graph.json by hand / with the editor in the website,
 # or drop a review into notes/ and let the model extract a first graph:
 litgraph extract notes/review.md
 litgraph serve                # http://127.0.0.1:5058/
 ```
 
-Without a key everything except the chat works. `litgraph check` validates the graph and tests the model.
+By default the chat runs through **Claude Code** with your own sign-in (the `claude` CLI; a claude.ai
+subscription), so no API key is needed: sign in once with `claude` in a terminal. To use the Messages API
+with an API key instead, set `provider = "anthropic"` under `[model]` in `litgraph.toml` and put
+`ANTHROPIC_API_KEY` in `.env`. `litgraph check` validates the graph and makes one test call to the model.
 
 ### The example
 
@@ -50,13 +52,24 @@ solid-state electrolytes. The graph was written from the review by hand (51 node
 
 ```bash
 cd examples/md_coarse_graining
-cp .env.example .env          # add ANTHROPIC_API_KEY
+litgraph check                # graph + one test call through Claude Code
 litgraph serve
 ```
 
 ## How the agent works
 
-Every answer is one request to the Anthropic Messages API with:
+Two providers, chosen with `provider` under `[model]` in `litgraph.toml`, give the model the same context,
+tools and events:
+
+- **`claude-code`** (default): the turn runs through Claude Code via the Claude Agent SDK, which uses the
+  CLI bundled with the SDK (or `cli_path`) and your Claude Code sign-in. The four graph tools run in this
+  process as an in-process MCP server; web search and web fetch are Claude Code's own `WebSearch` and
+  `WebFetch`. Your `CLAUDE.md` and Claude Code settings are not loaded (`setting_sources = []`), and no
+  other tools are allowed.
+- **`anthropic`**: one request to the Anthropic Messages API with an API key, the tools defined inline,
+  and Anthropic's server-side `web_search` / `web_fetch`.
+
+With either, the request carries:
 
 - a system prompt: the agent's role, your `AGENTS.md` (your research, terminology rules, what belongs in the
   graph), and the whole graph as compact text (cached with prompt caching);
@@ -68,8 +81,9 @@ Every answer is one request to the Anthropic Messages API with:
 it, then writes it to `graph.json` with status `proposed`. Every write keeps a `graph.backup.json`. With
 `auto_apply = true` in `litgraph.toml` additions go in as confirmed.
 
-The model is set under `[model]` in `litgraph.toml` (default `claude-opus-5-5`; `effort` controls how hard
-it thinks). The key is read from `.env` or the environment (`ANTHROPIC_API_KEY`).
+`name` under `[model]` picks the model (unset: Claude Code's default, or `claude-opus-5-5` for the API);
+`effort` controls how hard it thinks. An API key is read from `.env` or the environment (`ANTHROPIC_API_KEY`)
+and only matters for `provider = "anthropic"`.
 
 ## Graph format
 
@@ -93,7 +107,8 @@ Edge types: `contains`, `addresses`, `uses`, `serves`, `extends`, `contrasts`, `
 | Folder | What's in it |
 | --- | --- |
 | `src/litgraph/store.py` | `graph.json`: schema, validation, edits, the text outline the model reads |
-| `src/litgraph/agent.py` | The tool loop with the Anthropic SDK, streamed as NDJSON events |
+| `src/litgraph/agent.py` | The tools, prompts and the Messages API tool loop, streamed as NDJSON events |
+| `src/litgraph/claude_code.py` | The same agent run through Claude Code (Claude Agent SDK, in-process MCP tools) |
 | `src/litgraph/literature.py` | Semantic Scholar, Crossref and arXiv lookups |
 | `src/litgraph/server.py` | Flask: the page, graph API, proposals, chat stream |
 | `src/litgraph/static/` | The website: canvas graph with its own force layout, node card, editor, chat |
