@@ -141,6 +141,20 @@ def create_app(workspace: Workspace | None = None, client=None) -> Flask:
             return jsonify({"ok": False, "message": "q is required."}), 400
         return jsonify({"ok": True, **literature.search(query, int(request.args.get("limit", 8)))})
 
+    @app.post("/api/complete")
+    def complete_node():
+        payload = request.get_json(force=True) or {}
+        ready, why = workspace.ai_ready()
+        if not ready:
+            return jsonify({"ok": False, "message": why}), 503
+        draft = payload.get("node") or {}
+        if not str(draft.get("label", "")).strip():
+            return jsonify({"ok": False, "message": "Give at least a label."}), 400
+        try:
+            return jsonify(agent.complete_node(draft, payload.get("links") or []))
+        except Exception as exc:
+            return jsonify({"ok": False, "message": f"{type(exc).__name__}: {exc}"}), 500
+
     @app.post("/api/answer/stream")
     def answer_stream():
         payload = request.get_json(force=True) or {}

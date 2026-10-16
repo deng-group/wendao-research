@@ -79,7 +79,9 @@ kbd { padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; color
 .node-card { position: absolute; z-index: 6; right: 22px; top: 16px; width: min(400px, calc(100% - 44px)); max-height: calc(100% - 90px); overflow: auto; padding: 18px 20px; border: 1px solid var(--line-strong); border-radius: 14px; background: color-mix(in srgb, var(--panel) 96%, transparent); box-shadow: 0 20px 50px rgba(15, 23, 42, .18); backdrop-filter: blur(16px); scrollbar-width: thin; }
 .card-close { position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; border: 0; color: var(--muted); background: transparent; cursor: pointer; font-size: 1.35rem; }
 .node-kind { margin: 0 0 6px; font-size: .68rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
-.node-kind em { margin-left: 8px; padding: 2px 7px; border-radius: 999px; font-style: normal; font-weight: 700; letter-spacing: .04em; text-transform: none; color: var(--accent-strong); background: var(--accent-soft); }
+.node-status { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 6px; color: var(--muted); font-size: .74rem; }
+.node-status .proposed { color: var(--accent-strong); font-weight: 700; }
+.node-status .badge { padding: 1px 7px; border-radius: 999px; color: var(--accent-strong); background: var(--accent-soft); font-weight: 700; cursor: help; }
 .node-card h2 { margin: 0; max-width: calc(100% - 20px); font-size: 1.2rem; line-height: 1.3; overflow-wrap: anywhere; }
 .node-meta { margin: 8px 0 0; color: var(--muted); font-size: .78rem; line-height: 1.5; }
 .node-meta a { color: var(--accent-strong); }
@@ -169,7 +171,10 @@ kbd { padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; color
 .edit-links ul { margin: 8px 0; padding: 0; list-style: none; display: grid; gap: 4px; max-height: 160px; overflow: auto; }
 .edit-links li { display: flex; align-items: center; gap: 8px; font-size: .8rem; } .edit-links li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .edit-links li button { border: 0; background: transparent; color: var(--danger); cursor: pointer; font-size: .9rem; }
-.add-link { grid-template-columns: 2fr 1fr 1fr auto; align-items: end; }
+.add-link { grid-template-columns: auto auto 2fr 1.2fr auto; align-items: end; }
+.dialog-gap { flex: 1; }
+.dialog-actions .fill { border-color: var(--accent-line); color: var(--accent-strong); background: var(--accent-soft); }
+.dialog-actions .fill:disabled { opacity: .6; cursor: wait; }
 .add-link button, .dialog-actions button { padding: 7px 12px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--panel-2); cursor: pointer; font-size: .8rem; font-weight: 650; color: var(--text); }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 .dialog-actions .primary { border-color: var(--accent); color: var(--on-accent); background: var(--accent); }
@@ -181,4 +186,5 @@ kbd { padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; color
   .graph-header { grid-template-columns: auto 1fr auto; gap: 10px; padding: 0 14px; } kbd, .brand small { display: none; }
   .node-card { right: 12px; left: 12px; width: auto; top: auto; bottom: 60px; max-height: 55%; }
   .add-link { grid-template-columns: 1fr 1fr; }
+  .dialog-actions { flex-wrap: wrap; }
 }

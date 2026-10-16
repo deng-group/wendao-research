@@ -42,7 +42,7 @@ SOURCES = {"review", "chat", "search", "manual", "extract"}
 
 # Extra fields per type, beyond id/type/label/summary/aliases/tags/status/source. (required, optional)
 TYPE_FIELDS = {
-    "family": ((), ("relevance",)),
+    "family": ((), ("keeps", "discards", "computes", "relevance")),
     "technique": ((), ("reference",)),
     "paper": (("year", "authors", "venue", "learns", "discards", "validated_at"), ("doi", "url", "priority", "notes")),
     "claim": (("claim_status",), ("scope",)),
@@ -283,7 +283,7 @@ class Graph:
                     hard.append(f"Quantity `{nid}` is missing {', '.join(missing)}.")
             elif kind == "family":
                 if not node["summary"]:
-                    hard.append(f"Family `{nid}` needs a summary (what it keeps, discards, still computes).")
+                    hard.append(f"Family `{nid}` needs a summary explaining the idea; keeps / discards / computes are separate fields.")
         for edge in self.edges:
             if node_ids is not None and edge["source"] not in node_ids and edge["target"] not in node_ids:
                 continue
@@ -429,8 +429,12 @@ class Graph:
                     bits.append(f"status: {node.get('claim_status', '?')}")
                 elif node_type == "quantity":
                     bits.append(f"{node.get('level', '?')}; definition: {node.get('definition', '')}")
-                elif node_type == "family" and node.get("relevance"):
-                    bits.append(f"relevance {node['relevance']}/5")
+                elif node_type == "family":
+                    for key in ("keeps", "discards", "computes"):
+                        if node.get(key):
+                            bits.append(f"{key}: {node[key]}")
+                    if node.get("relevance"):
+                        bits.append(f"relevance {node['relevance']}/5")
                 if node["status"] != "confirmed":
                     bits.append(f"[{node['status']}]")
                 summary = node["summary"].replace("\n", " ")

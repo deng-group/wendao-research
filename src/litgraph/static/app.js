@@ -16,14 +16,52 @@ const LINK_STRENGTH = { contains: 0.7, uses: 0.4, extends: 0.5, contrasts: 0.25,
 const ALWAYS_LABELLED = new Set(["family", "quantity"]);
 const VALIDATION_LEVELS = ["structural", "thermodynamic", "kinetic", "transport", "mechanistic"];
 const CLAIM_STATUSES = ["supported", "contradicted", "contested", "hypothesis", "open"];
+const LEVEL_HELP = {
+  structural: "Structural: distributions of structure (radial distribution function, site occupancy, coordination).",
+  thermodynamic: "Thermodynamic: free-energy differences, equilibrium populations.",
+  kinetic: "Kinetic: residence times, transition probabilities, hop rates.",
+  transport: "Transport: mean squared displacement, diffusivity, correlation factor.",
+  mechanistic: "Mechanistic: migration pathways, cooperative events, environment-dependent transitions.",
+};
+const CLAIM_HELP = {
+  supported: "Supported: at least one paper in the graph gives evidence for it.",
+  contradicted: "Contradicted: at least one paper in the graph gives evidence against it.",
+  contested: "Contested: papers in the graph point both ways.",
+  hypothesis: "Hypothesis: the reviewer's judgement; no direct evidence recorded yet.",
+  open: "Open: an unanswered question; nothing in the graph settles it.",
+};
+const STATUS_TEXT = {
+  seed: "From the original review", proposed: "Proposed by the agent, not kept yet",
+  chat: "Added from a conversation and kept", search: "Added from a search and kept", manual: "Added by you", extract: "Extracted from notes", review: "From the original review",
+};
+// How a link reads from the side of the node whose card is open: [heading, edge label shown?]
+function linkHeading(node, edge, other) {
+  const out = edge.source === node.id;
+  switch (edge.type) {
+    case "contains": return out ? (other.type === "paper" ? "Papers in this family" : "Techniques in this family") : "Part of";
+    case "uses": return out ? "Techniques used" : "Used in";
+    case "extends": return out ? "Builds on" : "Extended by";
+    case "contrasts": return "Compared with";
+    case "supports": return out ? "Gives evidence for" : "Supported by";
+    case "contradicts": return out ? "Gives evidence against" : "Contradicted by";
+    case "about": return out ? "About" : "Claims about it";
+    case "validates": return out ? "Reports evidence for" : "Reported in";
+    default: return "Related";
+  }
+}
+function statusText(node) {
+  if (node.status === "proposed") return STATUS_TEXT.proposed;
+  if (node.status === "seed") return STATUS_TEXT.seed;
+  return STATUS_TEXT[node.source] || "Confirmed";
+}
 // Fields per level, beyond label / summary / aliases: [key, label, kind]. kind: text, textarea, int, select:<name>, multi:<name>
 const TYPE_FIELDS = {
-  family: [["relevance", "Relevance to the question (1-5)", "int"]],
-  technique: [["reference", "Reference (citation or paper id)", "text"]],
+  family: [["keeps", "Keeps or learns", "textarea"], ["discards", "Gives up", "textarea"], ["computes", "Still has to run", "textarea"], ["relevance", "Relevance to the question (1-5)", "int"]],
+  technique: [["reference", "Reference (a citation, or the id of its defining paper)", "text"]],
   paper: [["year", "Year", "int"], ["venue", "Venue", "text"], ["authors", "Authors", "text"], ["doi", "DOI", "text"], ["url", "URL", "text"],
-          ["learns", "Learns", "textarea"], ["discards", "Discards", "textarea"], ["validated_at", "Validated at", "multi:levels"], ["priority", "Reading priority", "int"]],
-  claim: [["claim_status", "Status", "select:claim"], ["scope", "Scope (where it holds)", "text"]],
-  quantity: [["level", "Validation level", "select:levels"], ["definition", "Operational definition", "textarea"], ["symbol", "Symbol", "text"], ["units", "Units", "text"]],
+          ["learns", "What it learns", "textarea"], ["discards", "What it leaves out", "textarea"], ["validated_at", "Evidence reported at", "multi:levels"], ["priority", "Reading priority", "int"]],
+  claim: [["claim_status", "Status", "select:claim"], ["scope", "Where it holds", "text"]],
+  quantity: [["level", "Validation level", "select:levels"], ["definition", "How it is computed (object, data, computation)", "textarea"], ["symbol", "Symbol", "text"], ["units", "Units", "text"]],
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -498,10 +536,11 @@ function setPinned(nodeId) {
   if (node) focusOn(nodeId);
   draw();
 }
-function chip(node, extra = "") {
-  const button = document.createElement("button"); button.type = "button"; button.className = "chip"; button.title = node.summary || node.label;
+function chip(node, extra = "", options = {}) {
+  const button = document.createElement("button"); button.type = "button"; button.className = "chip";
+  button.title = node.type === "paper" ? node.label : node.summary || node.label;
   const dot = document.createElement("i"); dot.className = "dot"; dot.style.background = `var(--c-${node.type})`;
-  const text = document.createElement("span"); text.textContent = node.label; button.append(dot, text);
+  const text = document.createElement("span"); text.textContent = options.cite && node.type === "paper" ? citeName(node) : node.label; button.append(dot, text);
   if (extra) { const small = document.createElement("small"); small.textContent = extra; button.appendChild(small); }
   button.addEventListener("click", () => selectNode(node.id, { fit: true }));
   return button;
@@ -516,46 +555,59 @@ function fieldRow(label, value) {
 }
 function showNodeCard(node) {
   el.kind.textContent = `Level ${LEVEL_NUMBER[node.type] || ""} · ${state.nodeTypes[node.type] || node.type}`; el.kind.style.color = `var(--c-${node.type})`;
-  const badges = [];
-  if (node.status !== "confirmed") badges.push(node.status === "proposed" ? "proposed by the agent" : node.status);
-  if (node.type === "claim" && node.claim_status) badges.push(node.claim_status);
-  if (node.type === "quantity" && node.level) badges.push(node.level);
-  el.status.hidden = !badges.length; el.status.textContent = badges.join(" · ");
+  el.status.hidden = false; el.status.replaceChildren();
+  const origin = document.createElement("span"); origin.textContent = statusText(node); origin.className = node.status === "proposed" ? "proposed" : ""; el.status.appendChild(origin);
+  if (node.type === "claim" && node.claim_status) { const b = document.createElement("span"); b.textContent = node.claim_status; b.title = CLAIM_HELP[node.claim_status] || ""; b.className = "badge"; el.status.appendChild(b); }
+  if (node.type === "quantity" && node.level) { const b = document.createElement("span"); b.textContent = `${node.level} level`; b.title = LEVEL_HELP[node.level] || ""; b.className = "badge"; el.status.appendChild(b); }
   el.title.textContent = node.label;
-  const meta = [];
-  if (node.authors) meta.push(node.authors); if (node.venue || node.year) meta.push([node.venue, node.year].filter(Boolean).join(" "));
-  el.meta.replaceChildren(meta.join(" · "));
-  const link = node.doi ? `https://doi.org/${node.doi.replace(/^https?:\/\/doi\.org\//, "")}` : node.url;
-  if (link) { el.meta.append(meta.length ? " · " : ""); const a = document.createElement("a"); a.href = link; a.target = "_blank"; a.rel = "noopener"; a.textContent = node.doi ? "DOI ↗" : "Open ↗"; el.meta.appendChild(a); }
-  if (node.type === "paper" && node.priority) { el.meta.append(` · reading priority ${node.priority}`); }
-  if (node.type === "family" && node.relevance) { el.meta.append(`Relevance to the question: ${node.relevance}/5`); }
+  el.meta.replaceChildren();
+  if (node.type === "paper") {
+    const who = [node.authors, node.year ? `(${node.year})` : ""].filter(Boolean).join(" ");
+    el.meta.append([who, node.venue].filter(Boolean).join(" · "));
+    const link = node.doi ? `https://doi.org/${node.doi.replace(/^https?:\/\/doi\.org\//, "")}` : node.url;
+    if (link) { el.meta.append(" · "); const a = document.createElement("a"); a.href = link; a.target = "_blank"; a.rel = "noopener"; a.textContent = node.doi ? "DOI ↗" : "Open ↗"; el.meta.appendChild(a); }
+    if (node.priority) el.meta.append(` · reading priority ${node.priority}`);
+  } else if (node.type === "family" && node.relevance) el.meta.append(`Relevance to the research question: ${node.relevance} of 5 (the reviewer's judgement)`);
+  else if (node.type === "technique" && node.reference) {
+    const ref = state.nodesById.get(node.reference); el.meta.append("Reference: ");
+    if (ref) { const a = document.createElement("a"); a.href = "#"; a.textContent = citeName(ref); a.title = ref.label; a.addEventListener("click", (e) => { e.preventDefault(); selectNode(ref.id, { fit: true }); }); el.meta.appendChild(a); } else el.meta.append(node.reference);
+  }
   el.meta.hidden = !el.meta.textContent;
   el.summary.textContent = node.summary || ""; el.summary.hidden = !node.summary;
   el.links.replaceChildren();
-  // the structured fields of the level
+  // the structured fields of the level, in plain words
+  const levelTags = (levels) => { const wrap = document.createElement("span"); for (const level of levels) { const t = document.createElement("i"); t.className = "tag"; t.textContent = level; t.title = LEVEL_HELP[level] || ""; wrap.appendChild(t); } return wrap; };
   if (node.type === "paper") {
-    if (node.learns) el.links.appendChild(fieldRow("Learns", node.learns));
-    if (node.discards) el.links.appendChild(fieldRow("Discards", node.discards));
-    el.links.appendChild(fieldRow("Validated at", node.validated_at?.length ? node.validated_at : ["not recorded"]));
+    if (node.learns) el.links.appendChild(fieldRow("What it learns", node.learns));
+    if (node.discards) el.links.appendChild(fieldRow("What it leaves out", node.discards));
+    const row = fieldRow("Evidence reported at", node.validated_at?.length ? levelTags(node.validated_at) : "not recorded"); row.title = "The validation levels the paper itself reports results for; hover a level for what it covers."; el.links.appendChild(row);
+  } else if (node.type === "family") {
+    if (node.keeps) el.links.appendChild(fieldRow("Keeps or learns", node.keeps));
+    if (node.discards) el.links.appendChild(fieldRow("Gives up", node.discards));
+    if (node.computes) el.links.appendChild(fieldRow("Still has to run", node.computes));
   } else if (node.type === "claim") {
-    if (node.scope) el.links.appendChild(fieldRow("Scope", node.scope));
+    if (node.scope) el.links.appendChild(fieldRow("Where it holds", node.scope));
   } else if (node.type === "quantity") {
-    if (node.definition) el.links.appendChild(fieldRow("Definition", node.definition));
+    if (node.definition) el.links.appendChild(fieldRow("How it is computed", node.definition));
     if (node.symbol || node.units) el.links.appendChild(fieldRow("Symbol", [node.symbol, node.units].filter(Boolean).join(", ")));
-  } else if (node.type === "technique" && node.reference) {
-    const ref = state.nodesById.get(node.reference);
-    el.links.appendChild(fieldRow("Reference", ref ? chip(ref) : node.reference));
   }
+  // links, grouped by what they mean from this node's side
   const groups = new Map();
   for (const edge of state.edgesByNode.get(node.id) || []) {
-    const outgoing = edge.source === node.id; const other = state.nodesById.get(outgoing ? edge.target : edge.source); if (!other) continue;
-    const name = edge.label || (outgoing ? state.edgeTypes[edge.type] || edge.type : `← ${state.edgeTypes[edge.type] || edge.type}`);
-    const key = edge.label ? `${outgoing ? "" : "← "}${edge.label}` : name;
-    if (!groups.has(key)) groups.set(key, []); groups.get(key).push(other);
+    const other = state.nodesById.get(edge.source === node.id ? edge.target : edge.source); if (!other) continue;
+    const heading = linkHeading(node, edge, other);
+    if (!groups.has(heading)) groups.set(heading, []); groups.get(heading).push({ edge, other });
   }
-  for (const [name, others] of groups) {
-    const group = document.createElement("div"); group.className = "group"; const title = document.createElement("b"); title.textContent = name; group.appendChild(title);
-    for (const other of others) group.appendChild(chip(other));
+  const order = ["Part of", "Techniques in this family", "Papers in this family", "Techniques used", "Used in", "Reports evidence for", "Reported in", "About", "Claims about it", "Supported by", "Contradicted by", "Gives evidence for", "Gives evidence against", "Builds on", "Extended by", "Compared with", "Related"];
+  for (const heading of order) {
+    const items = groups.get(heading); if (!items) continue;
+    const group = document.createElement("div"); group.className = "group"; const title = document.createElement("b"); title.textContent = heading; group.appendChild(title);
+    for (const { edge, other } of items) {
+      const c = chip(other, "", { cite: true });
+      if (edge.label && ["contrasts", "relates", "extends"].includes(edge.type)) { const why = document.createElement("small"); why.textContent = `— ${edge.label}`; c.appendChild(why); }
+      if (edge.note) c.title = `${c.title}\n${edge.note}`;
+      group.appendChild(c);
+    }
     el.links.appendChild(group);
   }
   el.confirm.hidden = node.status !== "proposed";
@@ -600,7 +652,7 @@ function renderTypeFields(node) {
       input.value = value || "";
     } else if (kind.startsWith("multi")) {
       input = document.createElement("div"); input.className = "checks";
-      for (const option of VALIDATION_LEVELS) { const l = document.createElement("label"); const c = document.createElement("input"); c.type = "checkbox"; c.value = option; c.checked = (value || []).includes(option); l.append(c, option); input.appendChild(l); }
+      for (const option of VALIDATION_LEVELS) { const l = document.createElement("label"); l.title = LEVEL_HELP[option]; const c = document.createElement("input"); c.type = "checkbox"; c.value = option; c.checked = (value || []).includes(option); l.append(c, option); input.appendChild(l); }
     } else { input = document.createElement("input"); if (kind === "int") { input.type = "number"; input.min = 0; } input.value = value ?? ""; }
     input.dataset.field = key; input.dataset.kind = kind; wrap.appendChild(input); box.appendChild(wrap);
   }
@@ -623,6 +675,33 @@ function openEditor(node) {
   renderTypeFields(node); renderEditLinks(); el.dialog.showModal();
 }
 $("#edit-type").addEventListener("change", () => renderTypeFields(state.editingId ? state.nodesById.get(state.editingId) : null));
+// Fill in with AI: send what is filled so far, get the rest back (the model may search for a paper's metadata),
+// and put it into the form for review; nothing is saved until Save.
+$("#edit-fill").addEventListener("click", async () => {
+  const button = $("#edit-fill"); if (button.disabled) return;
+  const draft = { id: state.editingId || undefined, type: $("#edit-type").value, label: $("#edit-label").value.trim(), summary: $("#edit-summary").value.trim(),
+    aliases: $("#edit-aliases").value.split(",").map((a) => a.trim()).filter(Boolean), ...readTypeFields() };
+  if (!draft.label) { el.editError.textContent = "Give at least a label (a title, a name, or a sentence) for the AI to start from."; el.editError.hidden = false; return; }
+  el.editError.hidden = true; button.disabled = true; button.textContent = "Filling in…";
+  try {
+    const response = await fetch("/api/complete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ node: draft, links: state.pendingLinks.map((p) => ({ target: p.target, type: p.type, label: p.label })) }) });
+    const reply = await response.json();
+    if (!reply.ok) throw new Error(reply.message || "The AI could not fill this in.");
+    const node = reply.node || {};
+    if (node.label && !draft.label) $("#edit-label").value = node.label;
+    if (node.summary) $("#edit-summary").value = node.summary;
+    if (node.aliases?.length) $("#edit-aliases").value = [...new Set([...draft.aliases, ...node.aliases])].join(", ");
+    if (node.type && TYPE_FIELDS[node.type]) $("#edit-type").value = node.type;
+    renderTypeFields({ ...node, type: $("#edit-type").value });
+    for (const edge of reply.edges || []) {
+      const target = state.nodesById.get(edge.target); if (!target) continue;
+      if (!state.pendingLinks.some((p) => p.target === edge.target && p.type === edge.type)) state.pendingLinks.push({ target: edge.target, targetLabel: target.label, type: edge.type, label: edge.label || "", incoming: Boolean(edge.incoming) });
+    }
+    renderEditLinks();
+    if (reply.note) { el.editError.textContent = reply.note; el.editError.hidden = false; }
+  } catch (error) { el.editError.textContent = error.message; el.editError.hidden = false; }
+  finally { button.disabled = false; button.textContent = "Fill in with AI"; }
+});
 function renderEditLinks() {
   el.linkList.replaceChildren();
   const existing = state.editingId ? state.edgesByNode.get(state.editingId) || [] : [];
@@ -634,7 +713,7 @@ function renderEditLinks() {
     li.append(text, remove); el.linkList.appendChild(li);
   }
   for (const pending of state.pendingLinks) {
-    const li = document.createElement("li"); const text = document.createElement("span"); text.textContent = `→ ${pending.label || state.edgeTypes[pending.type]}: ${pending.targetLabel} (new)`;
+    const li = document.createElement("li"); const text = document.createElement("span"); text.textContent = `${pending.incoming ? "←" : "→"} ${pending.label || state.edgeTypes[pending.type]}: ${pending.targetLabel} (new)`;
     const remove = document.createElement("button"); remove.type = "button"; remove.textContent = "×"; remove.addEventListener("click", () => { state.pendingLinks = state.pendingLinks.filter((p) => p !== pending); renderEditLinks(); });
     li.append(text, remove); el.linkList.appendChild(li);
   }
@@ -642,7 +721,8 @@ function renderEditLinks() {
 el.linkAdd.addEventListener("click", () => {
   const label = el.linkTarget.value.trim(); const target = state.graph.nodes.find((n) => n.label.toLowerCase() === label.toLowerCase());
   if (!target) { el.editError.textContent = `No node called "${label}". Pick one from the list.`; el.editError.hidden = false; return; }
-  el.editError.hidden = true; state.pendingLinks.push({ target: target.id, targetLabel: target.label, type: el.linkType.value, label: el.linkLabel.value.trim() });
+  const type = el.linkType.value; const incoming = $("#link-direction").value === "in";
+  el.editError.hidden = true; state.pendingLinks.push({ target: target.id, targetLabel: target.label, type, label: el.linkLabel.value.trim(), incoming });
   el.linkTarget.value = ""; el.linkLabel.value = ""; renderEditLinks();
 });
 $("#add-node").addEventListener("click", () => openEditor(null));
@@ -655,7 +735,7 @@ el.editForm.addEventListener("submit", async (event) => {
     aliases, status: "confirmed", ...readTypeFields() };
   const reply = await api("/api/graph/nodes", payload, "POST", { silent: true });
   if (!reply?.ok) { el.editError.textContent = reply?.message || "Could not save."; el.editError.hidden = false; return; }
-  for (const pending of state.pendingLinks) await api("/api/graph/edges", { source: reply.node.id, target: pending.target, type: pending.type, label: pending.label }, "POST", { silent: true });
+  for (const pending of state.pendingLinks) await api("/api/graph/edges", pending.incoming ? { source: pending.target, target: reply.node.id, type: pending.type, label: pending.label } : { source: reply.node.id, target: pending.target, type: pending.type, label: pending.label }, "POST", { silent: true });
   await reloadGraph({ keepPositions: true });
   el.dialog.close("saved"); selectNode(reply.node.id, { fit: !state.editingId });
 });

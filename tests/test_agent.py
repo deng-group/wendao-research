@@ -109,6 +109,27 @@ class AgentTests(unittest.TestCase):
             page = client.get("/").get_data(as_text=True)
             self.assertIn("MD coarse-graining", page)
 
+    def test_complete_node_fills_fields_and_edges(self):
+        os.environ["ANTHROPIC_API_KEY"] = "test"
+        completion = {"node": {"type": "paper", "label": "Diffusion models for ion hops", "summary": "s", "year": 2024, "authors": "A. Person, B. Other",
+                               "venue": "J. Fake", "doi": "10.1000/fake", "learns": "hop statistics", "discards": "lattice motion", "validated_at": ["kinetic"],
+                               "aliases": [], "tags": [], "url": "", "relevance": 0, "reference": "", "priority": 0, "claim_status": "open", "scope": "",
+                               "definition": "", "level": "kinetic", "symbol": "", "units": "", "keeps": "", "computes": ""},
+                      "edges": [{"target": "family:f", "type": "contains", "label": "", "incoming": True},
+                                {"target": "Flow matching", "type": "uses", "label": "", "incoming": False},
+                                {"target": "nope:x", "type": "uses", "label": "", "incoming": False}],
+                      "note": "Metadata from the search."}
+        replies = [[{"tool": "search_literature", "input": {"query": "Diffusion models for ion hops"}}], [{"text": json.dumps(completion)}]]
+        with FakeAnthropic(replies) as fake, mock.patch.object(literature, "search", fake_search):
+            app = create_app(self.workspace, client=self.client_for(fake))
+            reply = app.test_client().post("/api/complete", json={"node": {"type": "paper", "label": "Diffusion models for ion hops"}}).get_json()
+        self.assertTrue(reply["ok"])
+        self.assertEqual(reply["node"]["authors"], "A. Person, B. Other")
+        self.assertNotIn("scope", reply["node"])  # empty fields dropped
+        self.assertEqual([(e["target"], e["incoming"]) for e in reply["edges"]], [("family:f", True), ("technique:flow-matching", False)])
+        self.assertEqual(fake.requests[0]["output_config"]["format"]["type"], "json_schema")
+        self.assertNotIn("propose_graph_changes", [t.get("name") for t in fake.requests[0]["tools"]])
+
     def test_literature_formatting_without_network(self):
         text = literature.format_results(fake_search("q"))
         self.assertIn("Diffusion models for ion hops", text)

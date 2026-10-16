@@ -73,6 +73,9 @@ def tool_definitions(workspace) -> list[dict]:
             "aliases": {"type": "array", "items": {"type": "string"}},
             "tags": {"type": "array", "items": {"type": "string"}},
             # family
+            "keeps": {"type": "string", "description": "family: what it keeps or learns"},
+            "discards": {"type": "string", "description": "family: what it gives up; paper: what it assumes away, removes or does not model"},
+            "computes": {"type": "string", "description": "family: what it still has to run"},
             "relevance": {"type": "integer", "minimum": 1, "maximum": 5, "description": "family: relevance to the research question, 1-5"},
             # technique
             "reference": {"type": "string", "description": "technique: standard citation or the id of its defining paper"},
@@ -83,7 +86,6 @@ def tool_definitions(workspace) -> list[dict]:
             "doi": {"type": "string"},
             "url": {"type": "string"},
             "learns": {"type": "string", "description": "paper: what the model or method learns"},
-            "discards": {"type": "string", "description": "paper: what it assumes away, removes or does not model"},
             "validated_at": {"type": "array", "items": {"type": "string", "enum": list(VALIDATION_LEVELS)},
                              "description": "paper: validation levels the paper reports evidence for"},
             # claim
@@ -344,6 +346,27 @@ class Agent:
             + (f"# {title}\n\n" if title else "") + text
         )
 
+    def complete_node(self, draft: dict, links: list[dict] | None = None) -> dict:
+        """Fill in a partly written node and propose its edges; nothing is written to the graph."""
+        tools = [t for t in tool_definitions(self.workspace) if t.get("name") != "propose_graph_changes"]
+        messages = [{"role": "user", "content": COMPLETE_INSTRUCTION + "\n\n" + json.dumps({"node": draft, "links_already_chosen": links or []}, ensure_ascii=False)}]
+        params = {"model": self.workspace.model, "max_tokens": self.workspace.max_tokens, "system": self.system(), "messages": messages, "tools": tools,
+                  "output_config": {"effort": self.workspace.effort, "format": {"type": "json_schema", "schema": complete_schema()}}}
+        for _round in range(6):
+            with self.client.messages.stream(**params) as stream:
+                response = stream.get_final_message()
+            tool_uses = [b for b in response.content if b.type == "tool_use"]
+            if not tool_uses:
+                break
+            results = []
+            for block in tool_uses:
+                text, _event = self.run_tool(block.name, block.input if isinstance(block.input, dict) else {}, [])
+                results.append({"type": "tool_result", "tool_use_id": block.id, "content": text})
+            messages.append({"role": "assistant", "content": response.content})
+            messages.append({"role": "user", "content": results})
+        raw = next((b.text for b in response.content if b.type == "text"), "{}")
+        return clean_completion(json.loads(raw), self.graph_file.graph)
+
     def extract(self, text: str, title: str = "") -> dict:
         """Read a document (a review, notes) and return a change set to apply to the graph."""
         params = {
@@ -360,6 +383,49 @@ class Agent:
                 if node[key] in (None, "", []):
                     del node[key]
         return change
+
+
+COMPLETE_INSTRUCTION = """Complete the record of one node of the knowledge graph from what the researcher has typed so far
+(below as JSON). Keep every value they gave; fill in the empty fields. For a paper, get title, authors, year,
+venue and DOI from a search (search_literature, or web search), never from memory; if nothing is found, leave
+those fields empty and say so in `note`. Write `summary` for a reader who does not know the field. Then list
+the edges that connect this node to EXISTING nodes of the graph (by id), following the rules: a paper gets one
+`contains` edge from its family (incoming: true) and `uses` edges to its techniques; a claim gets `about`
+edges and, if a paper in the graph bears on it, `supports` / `contradicts` edges (incoming); a technique gets
+a `contains` edge from its family (incoming) and `uses` edges from papers that apply it (incoming); a quantity
+may get `validates` edges from papers (incoming). Only ids that exist in the graph. Reply with the JSON object
+only."""
+
+
+def complete_schema() -> dict:
+    node_schema = {"type": "object", "additionalProperties": False, "properties": {}}
+    source = next(t for t in tool_definitions(type("W", (), {"literature_search": False, "web_search": False})()) if t.get("name") == "propose_graph_changes")
+    props = source["input_schema"]["properties"]["nodes"]["items"]["properties"]
+    for key, spec in props.items():
+        if key == "id":
+            continue
+        node_schema["properties"][key] = spec
+    node_schema["required"] = list(node_schema["properties"])
+    edge_schema = {"type": "object", "additionalProperties": False,
+                   "properties": {"target": {"type": "string", "description": "id of the existing node"}, "type": {"type": "string", "enum": list(EDGE_TYPES)},
+                                  "label": {"type": "string"}, "incoming": {"type": "boolean", "description": "true when the existing node is the source"}},
+                   "required": ["target", "type", "label", "incoming"]}
+    return {"type": "object", "additionalProperties": False, "properties": {"node": node_schema, "edges": {"type": "array", "items": edge_schema}, "note": {"type": "string"}},
+            "required": ["node", "edges", "note"]}
+
+
+def clean_completion(data: dict, graph) -> dict:
+    """Keep only non-empty fields and edges to nodes that exist."""
+    from litgraph.store import TYPE_FIELDS
+    raw = data.get("node") or {}
+    allowed = {"type", "label", "summary", "aliases", "tags"} | {k for pair in TYPE_FIELDS.get(str(raw.get("type", "")), ((), ())) for k in pair}
+    node = {k: v for k, v in raw.items() if k in allowed and v not in (None, "", [], 0)}
+    edges = []
+    for edge in data.get("edges") or []:
+        target = graph.resolve(str(edge.get("target", "")))
+        if graph.node(target) and edge.get("type") in EDGE_TYPES:
+            edges.append({"target": target, "type": edge["type"], "label": str(edge.get("label") or ""), "incoming": bool(edge.get("incoming"))})
+    return {"ok": True, "node": node, "edges": edges, "note": str(data.get("note") or "")}
 
 
 def make_agent(workspace, graph_file: GraphFile, client=None) -> Agent:

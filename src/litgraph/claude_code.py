@@ -14,7 +14,7 @@ import threading
 from typing import Iterator
 
 from litgraph import __version__
-from litgraph.agent import Agent, tool_definitions
+from litgraph.agent import COMPLETE_INSTRUCTION, Agent, clean_completion, complete_schema, tool_definitions
 
 MAX_TURNS = 16
 SERVER = "litgraph"
@@ -26,7 +26,7 @@ class ClaudeCodeAgent(Agent):
     def _options(self, system: str, tools: list, events: "queue.Queue | None", structured: dict | None = None):
         from claude_agent_sdk import ClaudeAgentOptions
 
-        builtin = ["WebSearch", "WebFetch"] if self.workspace.web_search and not structured else []
+        builtin = ["WebSearch", "WebFetch"] if self.workspace.web_search else []
         options = ClaudeAgentOptions(
             system_prompt=system,
             tools=builtin,
@@ -164,6 +164,28 @@ class ClaudeCodeAgent(Agent):
             if event is None:
                 break
             yield event
+
+    def complete_node(self, draft: dict, links: list[dict] | None = None) -> dict:
+        from claude_agent_sdk import ResultMessage, query
+
+        system = "\n\n".join(block["text"] for block in self.system())
+        prompt = COMPLETE_INSTRUCTION + "\n\n" + json.dumps({"node": draft, "links_already_chosen": links or []}, ensure_ascii=False)
+        events: queue.Queue = queue.Queue()
+
+        async def run() -> dict:
+            tools = [t for t in self._tools(events, []) if t.name != "propose_graph_changes"]
+            result = None
+            async for message in query(prompt=prompt, options=self._options(system, tools, events, structured=complete_schema())):
+                if isinstance(message, ResultMessage):
+                    result = message
+            if result is None or result.is_error:
+                raise RuntimeError("Claude Code could not fill this in: " + ("; ".join(result.errors or []) if result else "no result"))
+            data = result.structured_output
+            if data is None and result.result:
+                data = json.loads(result.result)
+            return data or {}
+
+        return clean_completion(asyncio.run(run()), self.graph_file.graph)
 
     def extract(self, text: str, title: str = "") -> dict:
         from claude_agent_sdk import ResultMessage, query

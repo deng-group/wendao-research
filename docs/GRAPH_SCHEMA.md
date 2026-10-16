@@ -37,7 +37,7 @@ Ids are `type:slug`: `family:generative-dynamics`, `technique:markov-state-model
 
 | Type | Required fields | Optional fields |
 |---|---|---|
-| `family` | `summary` answering: what is kept or learned, what is discarded, what still has to be computed | `relevance` (1 to 5, the reviewer's judgement against the research question) |
+| `family` | `summary`: a plain explanation of the idea, for a reader who does not know the family | `keeps` (what it keeps or learns), `discards` (what it gives up), `computes` (what it still has to run); `relevance` (1 to 5, the reviewer's judgement against the research question) |
 | `technique` | `summary` | `reference` (the standard citation or paper id) |
 | `paper` | `year`, `authors`, `venue`; `learns` (what the model or method learns), `discards` (what it assumes away, removes or does not model), `validated_at` (list of validation levels, see below) | `doi`, `url`, `priority` (reading order) |
 | `claim` | `claim_status`: `supported`, `contradicted`, `contested`, `hypothesis`, `open` | `scope` (where it holds) |

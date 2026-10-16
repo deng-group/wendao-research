@@ -39,7 +39,8 @@
 
           <article id="node-card" class="node-card" hidden>
             <button id="close-node-card" class="card-close" type="button" aria-label="Close">×</button>
-            <p class="node-kind"><span id="node-kind"></span> <em id="node-status" hidden></em></p>
+            <p class="node-kind"><span id="node-kind"></span></p>
+            <p id="node-status" class="node-status"></p>
             <h2 id="node-title"></h2>
             <p id="node-meta" class="node-meta" hidden></p>
             <p id="node-summary" class="node-summary" hidden></p>
@@ -96,15 +97,18 @@
             <b>Links</b>
             <ul id="edit-link-list"></ul>
             <div class="add-link">
-              <input id="link-target" list="node-options" placeholder="Link to… (type a label)" autocomplete="off" />
-              <datalist id="node-options"></datalist>
+              <select id="link-direction" title="Direction of the link"><option value="out">this node →</option><option value="in">→ this node</option></select>
               <select id="link-type"></select>
+              <input id="link-target" list="node-options" placeholder="other node (type its name)" autocomplete="off" />
+              <datalist id="node-options"></datalist>
               <input id="link-label" placeholder="label (optional)" autocomplete="off" />
               <button id="link-add" type="button">Add link</button>
             </div>
           </div>
           <p id="edit-error" class="edit-error" hidden></p>
           <div class="dialog-actions">
+            <button id="edit-fill" type="button" class="fill" title="The AI fills in the empty fields from what you typed, searching for a paper's details if needed; you review before saving">Fill in with AI</button>
+            <span class="dialog-gap"></span>
             <button value="cancel" type="submit">Cancel</button>
             <button id="edit-save" value="save" type="submit" class="primary">Save</button>
           </div>
