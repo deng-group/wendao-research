@@ -556,9 +556,10 @@ function fieldRow(label, value) {
 function showNodeCard(node) {
   el.kind.textContent = `Level ${LEVEL_NUMBER[node.type] || ""} · ${state.nodeTypes[node.type] || node.type}`; el.kind.style.color = `var(--c-${node.type})`;
   el.status.hidden = false; el.status.replaceChildren();
-  const origin = document.createElement("span"); origin.textContent = statusText(node); origin.className = node.status === "proposed" ? "proposed" : ""; el.status.appendChild(origin);
+  if (node.status === "proposed") { const origin = document.createElement("span"); origin.textContent = "Proposed by the agent, not kept yet"; origin.className = "proposed"; el.status.appendChild(origin); }
   if (node.type === "claim" && node.claim_status) { const b = document.createElement("span"); b.textContent = node.claim_status; b.title = CLAIM_HELP[node.claim_status] || ""; b.className = "badge"; el.status.appendChild(b); }
   if (node.type === "quantity" && node.level) { const b = document.createElement("span"); b.textContent = `${node.level} level`; b.title = LEVEL_HELP[node.level] || ""; b.className = "badge"; el.status.appendChild(b); }
+  el.status.hidden = !el.status.childElementCount;
   el.title.textContent = node.label;
   el.meta.replaceChildren();
   if (node.type === "paper") {
