@@ -1,7 +1,0 @@
-.env
-build/index/
-build/reports/history/
-# Student data: never commit it
-students.csv
-usage.db
-.wendao-secret

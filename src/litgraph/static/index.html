@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="{{TITLE}}: a research knowledge graph with an AI research companion." />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'%3E%3Crect x='4' y='4' width='120' height='120' rx='28' fill='%230f172a'/%3E%3Ccircle cx='40' cy='44' r='11' fill='%2338bdf8'/%3E%3Ccircle cx='86' cy='38' r='8' fill='%23f59e0b'/%3E%3Ccircle cx='72' cy='88' r='13' fill='%23e11d48'/%3E%3Cpath d='M40 44 L86 38 L72 88 Z' fill='none' stroke='%23ffffff' stroke-width='5' stroke-linejoin='round'/%3E%3C/svg%3E" />
+    <title>{{TITLE}} · litgraph</title>
+    <link rel="stylesheet" href="./static/style.css?v={{VERSION}}" />
+  </head>
+  <body>
+    <main class="app-shell chat-is-open">
+      <section class="graph-workspace" aria-label="Knowledge graph">
+        <header class="graph-header">
+          <a class="brand" href="./" aria-label="litgraph home">
+            <svg class="brand-mark" viewBox="0 0 128 128" aria-hidden="true"><rect x="4" y="4" width="120" height="120" rx="28" fill="#0f172a"/><circle cx="40" cy="44" r="11" fill="#38bdf8"/><circle cx="86" cy="38" r="8" fill="#f59e0b"/><circle cx="72" cy="88" r="13" fill="#e11d48"/><path d="M40 44 L86 38 L72 88 Z" fill="none" stroke="#fff" stroke-width="5" stroke-linejoin="round"/></svg>
+            <span><strong>litgraph</strong><small id="graph-title">{{TITLE}}</small></span>
+          </a>
+          <label class="search-box">
+            <span class="sr-only">Find a node</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="m16 16 4 4"></path></svg>
+            <input id="graph-search" type="search" placeholder="Find a paper, method or concept" autocomplete="off" />
+            <kbd>⌘ K</kbd>
+          </label>
+          <div class="graph-actions">
+            <button id="add-node" class="icon-control" type="button" title="Add a node" aria-label="Add a node"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button>
+            <button id="reset-view" class="icon-control" type="button" title="Fit the whole graph" aria-label="Fit the whole graph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"></path></svg></button>
+            <button id="toggle-theme" class="icon-control" type="button" title="Light or dark" aria-label="Light or dark"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 3.5v17a8.5 8.5 0 0 0 0-17Z" class="filled"></path></svg></button>
+            <button id="open-chat" class="chat-launcher" type="button" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v11H9l-4 3V5Z"></path><path d="M8 9h8M8 12h5"></path></svg><span>Ask</span></button>
+          </div>
+        </header>
+
+        <div id="search-results" class="search-results" hidden></div>
+
+        <div id="graph-stage" class="graph-stage">
+          <canvas id="graph-canvas" role="img" aria-label="Knowledge graph. Use search to find a node."></canvas>
+          <div id="graph-hint" class="graph-hint"><span></span> Drag · scroll to zoom · click a node</div>
+
+          <article id="node-card" class="node-card" hidden>
+            <button id="close-node-card" class="card-close" type="button" aria-label="Close">×</button>
+            <p class="node-kind"><span id="node-kind"></span> <em id="node-status" hidden></em></p>
+            <h2 id="node-title"></h2>
+            <p id="node-meta" class="node-meta" hidden></p>
+            <p id="node-summary" class="node-summary" hidden></p>
+            <div id="node-links" class="node-links"></div>
+            <div class="card-actions">
+              <button id="explain-node" class="ask-node" type="button">Explain</button>
+              <button id="expand-node" class="ask-node" type="button" title="Search the literature for related work and propose additions">Find related</button>
+              <button id="edit-node" class="ask-node secondary" type="button">Edit</button>
+              <button id="confirm-node" class="ask-node secondary" type="button" hidden>Confirm</button>
+              <button id="delete-node" class="ask-node danger" type="button">Delete</button>
+            </div>
+          </article>
+
+          <div id="legend" class="legend" aria-label="Show or hide kinds of nodes"></div>
+        </div>
+      </section>
+
+      <aside id="chat-panel" class="chat-panel" aria-label="Research companion">
+        <header class="chat-header">
+          <div><p class="eyebrow">RESEARCH COMPANION</p><h1 id="chat-model">Claude</h1></div>
+          <div class="chat-header-actions">
+            <button id="clear-chat" class="chat-clear" type="button">Clear</button>
+            <button id="close-chat" class="chat-close" type="button" aria-label="Close chat">×</button>
+          </div>
+        </header>
+        <div id="context-bar" class="context-bar" hidden>
+          <span>About</span>
+          <button id="context-chip" type="button" title="Remove context"><b></b><i>×</i></button>
+        </div>
+        <section id="messages" class="messages" aria-live="polite" tabindex="0"></section>
+        <section id="suggestions" class="suggestions" aria-label="Suggested questions"></section>
+        <form id="chat-form" class="composer">
+          <label for="question" class="sr-only">Ask</label>
+          <textarea id="question" rows="1" placeholder="Ask about the field, or ask to search and add…"></textarea>
+          <div class="composer-footer">
+            <span>↵ Send · ⇧↵ New line</span>
+            <button id="send-question" type="submit" aria-label="Send"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 14-7-4 14-3-6-7-1Z"></path><path d="m12 13 7-8"></path></svg></button>
+          </div>
+        </form>
+      </aside>
+
+      <dialog id="edit-dialog" class="edit-dialog" aria-labelledby="edit-title">
+        <form method="dialog" id="edit-form">
+          <h2 id="edit-title">Edit node</h2>
+          <div class="field-grid">
+            <label>Label <input id="edit-label" required autocomplete="off" /></label>
+            <label>Type <select id="edit-type"></select></label>
+            <label class="wide">Summary <textarea id="edit-summary" rows="3"></textarea></label>
+            <label>Year <input id="edit-year" type="number" min="1800" max="2100" /></label>
+            <label>Venue <input id="edit-venue" autocomplete="off" /></label>
+            <label class="wide">Authors <input id="edit-authors" autocomplete="off" /></label>
+            <label>DOI <input id="edit-doi" autocomplete="off" /></label>
+            <label>URL <input id="edit-url" autocomplete="off" /></label>
+            <label class="wide">Aliases (comma separated) <input id="edit-aliases" autocomplete="off" /></label>
+          </div>
+          <div id="edit-links" class="edit-links">
+            <b>Links</b>
+            <ul id="edit-link-list"></ul>
+            <div class="add-link">
+              <input id="link-target" list="node-options" placeholder="Link to… (type a label)" autocomplete="off" />
+              <datalist id="node-options"></datalist>
+              <select id="link-type"></select>
+              <input id="link-label" placeholder="label (optional)" autocomplete="off" />
+              <button id="link-add" type="button">Add link</button>
+            </div>
+          </div>
+          <p id="edit-error" class="edit-error" hidden></p>
+          <div class="dialog-actions">
+            <button value="cancel" type="submit">Cancel</button>
+            <button id="edit-save" value="save" type="submit" class="primary">Save</button>
+          </div>
+        </form>
+      </dialog>
+    </main>
+    <script src="./static/app.js?v={{VERSION}}"></script>
+  </body>
+</html>

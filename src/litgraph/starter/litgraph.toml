@@ -1,0 +1,19 @@
+[project]
+title = "{{TITLE}}"
+description = "What this graph is about, in a sentence."
+
+[model]
+# Any Anthropic model id. The API key goes in .env (ANTHROPIC_API_KEY), never here.
+name = "claude-opus-5-5"
+effort = "medium"      # low | medium | high | xhigh | max: how hard the model thinks per answer
+max_tokens = 16000
+# fallbacks = false    # Anthropic's server-side refusal fallback (beta)
+
+[agent]
+web_search = true          # Anthropic's web search and web fetch tools
+literature_search = true   # Semantic Scholar, Crossref and arXiv lookups (no key needed)
+auto_apply = false         # true: the model's additions go straight in as confirmed, no review
+
+[server]
+host = "127.0.0.1"
+port = 5058

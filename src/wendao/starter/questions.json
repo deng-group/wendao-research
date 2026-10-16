@@ -1,9 +1,0 @@
-[
-  {
-    "id": "example",
-    "query": "What is an example concept?",
-    "expected_status": "answerable",
-    "expected_files": [],
-    "notes": "Replace these with real questions from your course. See the README for all fields."
-  }
-]

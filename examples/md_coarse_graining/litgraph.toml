@@ -1,0 +1,17 @@
+[project]
+title = "MD coarse-graining and acceleration for ion transport"
+description = "From accelerated MD and ML coarse-graining to generative dynamics models, read against Li-ion transport in solid-state electrolytes."
+
+[model]
+name = "claude-opus-5-5"
+effort = "medium"
+max_tokens = 16000
+
+[agent]
+web_search = true
+literature_search = true
+auto_apply = false
+
+[server]
+host = "127.0.0.1"
+port = 5058

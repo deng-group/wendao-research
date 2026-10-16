@@ -1,58 +1,17 @@
 [project]
-name = "wendao"
-version = "0.3.4"
-description = "An AI learning companion: turn course notes into an interactive knowledge graph and a course-grounded AI tutor"
+name = "litgraph"
+version = "0.1.0"
+description = "A research knowledge graph that grows as you read, search and chat, with a Claude research agent"
 readme = "README.md"
 license = "GPL-3.0-or-later"
-license-files = ["LICENSE"]
-keywords = ["education", "learning", "knowledge graph", "rag", "llm", "tutor", "course"]
-classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Environment :: Web Environment",
-    "Intended Audience :: Education",
-    "Intended Audience :: Science/Research",
-    "Operating System :: OS Independent",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Topic :: Education",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence",
-]
 requires-python = ">=3.11"
-authors = [{ name = "Yanhao Deng" }, { name = "Zeyu Deng" }]
-# The base install is what students need to open a course app. Teachers add the "teacher" extra.
 dependencies = [
+    "anthropic>=1.15,<2",
     "flask>=3.0,<4",
-    # Downloads the search model the first time it is needed.
-    "huggingface-hub>=0.24,<2",
-    "nbformat>=5.9,<6",
-    "numpy>=1.26,<3",
-    "onnxruntime>=1.20,<2",
-    # Read notes: PDF, Word, PowerPoint, and MyST front matter.
-    "pypdf>=4,<7",
-    "python-docx>=1.1,<2",
-    "python-pptx>=1.0,<2",
-    "pyyaml>=6,<7",
-    "tokenizers>=0.19,<1",
 ]
-
-[project.optional-dependencies]
-# Empty since 0.3.1 (everything is in the base install); kept so `pip install "wendao[teacher]"` still works.
-teacher = []
-# Run the search model with PyTorch instead of ONNX, on a GPU when available.
-gpu = ["sentence-transformers>=3,<6"]
-# Production WSGI server, used by deploy/mle-course-helper.service.
-deploy = ["gunicorn>=22,<24"]
 
 [project.scripts]
-wendao = "wendao.cli:main"
-
-[project.urls]
-Homepage = "https://github.com/deng-group/wendao"
-Documentation = "https://github.com/deng-group/wendao#readme"
-Issues = "https://github.com/deng-group/wendao/issues"
-"Example course" = "https://mle4217-5219.matsci.dev/"
+litgraph = "litgraph.cli:main"
 
 [build-system]
 requires = ["setuptools>=77"]
@@ -62,4 +21,4 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-wendao = ["web/static/**/*", "starter/*"]
+litgraph = ["static/*", "starter/*"]

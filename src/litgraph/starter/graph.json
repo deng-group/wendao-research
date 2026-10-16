@@ -1,0 +1,9 @@
+{
+  "schema": "1.0",
+  "title": "{{TITLE}}",
+  "description": "",
+  "nodes": [
+    {"id": "question:main", "type": "question", "label": "What is the question this graph is about?", "summary": "Edit this node, or ask the agent to build the graph from your notes with `litgraph extract notes/*.md`.", "status": "seed", "source": "manual"}
+  ],
+  "edges": []
+}

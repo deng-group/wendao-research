@@ -1,25 +1,6 @@
-.DS_Store
-.env
-.venv/
 __pycache__/
-*.py[cod]
 *.egg-info/
+.venv/
 build/
-dist/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-~$*
-deliverables/
-
-# The example workspace ships its chunks, graph, and search index so it runs out of the box.
-!examples/*/build/
-examples/*/build/reports/
-
-# Keep the course book as a sibling repository, not inside this repo.
-MLE4217_5219_book/
-
-# Student data from course servers: never commit it
-students.csv
-usage.db
-.wendao-secret
+.env
+examples/*/graph.backup.json
