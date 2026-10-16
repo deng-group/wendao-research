@@ -15,6 +15,36 @@ from litgraph import literature
 from litgraph.store import CLAIM_STATUSES, EDGE_TYPES, NODE_TYPES, VALIDATION_LEVELS, GraphFile
 
 MAX_TOOL_ROUNDS = 10
+BUILD_TOOL_ROUNDS = 40
+
+BUILD_INSTRUCTION = """Build a literature review of the topic named below, from scratch, directly into this graph (which is empty or
+nearly so). Work in this order, writing to the graph as you go with propose_graph_changes (one family with its
+techniques and papers per call, so each call stays small and valid):
+
+1. Search the literature (search_literature; web search for overviews) until you can name 4 to 8 method families:
+   ways of attacking the question, each defined by what it keeps or learns, what it gives up, and what it still
+   has to compute. Add them with a plain-language summary and keeps / discards / computes.
+2. For each family, the techniques it contains and 2 to 5 representative papers, each from a search result with
+   year, authors, venue, DOI; fill learns, discards and validated_at from the abstract or the paper. Link papers
+   to techniques with `uses`, and papers to each other with `extends` / `contrasts` where a stated relation exists.
+3. The quantities the papers validate against, with operational definitions, and `validates` edges.
+4. The claims the field makes or leaves open: 6 to 12 falsifiable statements with status and the papers that
+   support or contradict them; open questions as status open.
+Aim for about 15 to 25 papers in total. Never invent metadata: a paper you cannot find in a search does not go in.
+When done, answer with a short summary (families found, how many papers, the main open claims), citing nodes.
+Topic: """
+
+REVIEW_INSTRUCTION = """Write the review document of this graph, in Markdown, for a researcher. Use exactly this structure and nothing else:
+`# <title>`; a paragraph stating the research question (the graph's description) and what "accurate" means for it;
+`## Level 1: method families` with a table (Family | Keeps / learns | Gives up | Still computes | Relevance) and a
+paragraph on the stated contrasts between families; `## Level 2: techniques` with a table (Family | Technique | One
+line); `## Level 3: papers` grouped by family, one short paragraph per paper giving authors, year, venue, DOI link,
+what it learns, what it leaves out, and the evidence levels; `## Level 4: claims` with a table (Claim | Status |
+Evidence | About); `## Level 5: quantities` with a table (Level | Quantity | Definition); `## Reading order` (papers
+with a reading priority, else the five most connected papers, one line each on why); `## Where this leaves the
+question` (known, uncertain, the decision it affects, the next step). Cite node ids in square brackets after the
+first mention of each node. Use only what is in the graph; do not add papers or claims. Write the document only,
+no preamble."""
 
 ROLE = """You are a research companion for one researcher. You and they maintain a knowledge graph of a research
 field, organised in five levels: method families, techniques, papers, claims and quantities (defined below).
@@ -255,8 +285,11 @@ class Agent:
         return summary, {"type": "proposal", "proposal": proposal}
 
     # ---------- a turn ----------
-    def stream_answer(self, query: str, history: list[dict] | None = None, context_ids: list[str] | None = None) -> Iterator[dict]:
+    def stream_answer(self, query: str, history: list[dict] | None = None, context_ids: list[str] | None = None, mode: str = "chat") -> Iterator[dict]:
         graph = self.graph_file.graph
+        rounds = BUILD_TOOL_ROUNDS if mode == "build" else MAX_TOOL_ROUNDS
+        if mode == "build":
+            query = BUILD_INSTRUCTION + query
         context = [graph.node(node_id) for node_id in (context_ids or [])]
         context = [node for node in context if node]
         prefix = ""
@@ -273,7 +306,7 @@ class Agent:
         proposals: list[dict] = []
         answer_parts: list[str] = []
         yield {"type": "start", "model": self.workspace.model}
-        for _round in range(MAX_TOOL_ROUNDS):
+        for _round in range(rounds):
             params = self.request(messages, tools)
             with self._stream(params) as stream:
                 for event in stream:
@@ -345,6 +378,14 @@ class Agent:
             "not give; never invent metadata.\n\n"
             + (f"# {title}\n\n" if title else "") + text
         )
+
+    def write_review(self) -> str:
+        """The review document of the graph, in Markdown (the graph is the only source)."""
+        params = {"model": self.workspace.model, "max_tokens": max(self.workspace.max_tokens, 32000), "system": self.system(),
+                  "messages": [{"role": "user", "content": REVIEW_INSTRUCTION}], "output_config": {"effort": self.workspace.effort}}
+        with self.client.messages.stream(**params) as stream:
+            response = stream.get_final_message()
+        return "".join(block.text for block in response.content if block.type == "text").strip() + "\n"
 
     def complete_node(self, draft: dict, links: list[dict] | None = None) -> dict:
         """Fill in a partly written node and propose its edges; nothing is written to the graph."""

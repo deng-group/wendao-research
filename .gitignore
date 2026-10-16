@@ -4,3 +4,4 @@ __pycache__/
 build/
 .env
 examples/*/graph.backup.json
+examples/*/topics/*/graph.backup.json

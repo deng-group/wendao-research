@@ -5,7 +5,7 @@ from pathlib import Path
 
 from litgraph.store import Graph, GraphError, GraphFile
 
-EXAMPLE = Path(__file__).resolve().parents[1] / "examples" / "md_coarse_graining" / "graph.json"
+EXAMPLE = Path(__file__).resolve().parents[1] / "examples" / "md_coarse_graining" / "topics" / "md-coarse-graining" / "graph.json"
 
 
 class StoreTests(unittest.TestCase):

@@ -1,6 +1,6 @@
 # Literature review: MD coarse-graining and acceleration for ion transport in solid-state electrolytes
 
-Written in the five-level form of [the graph schema](../../../docs/GRAPH_SCHEMA.md): method families,
+Written in the five-level form of [the graph schema](../../../../docs/GRAPH_SCHEMA.md): method families,
 techniques, papers, claims, quantities. `graph.json` in this workspace is this document as a graph; ids in
 brackets are its node ids.
 

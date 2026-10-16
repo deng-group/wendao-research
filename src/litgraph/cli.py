@@ -25,18 +25,28 @@ def cmd_init(args) -> int:
 def cmd_check(args) -> int:
     workspace = Workspace.load(args.workspace)
     ok = True
-    try:
-        graph = Graph.load(workspace.graph_path)
-        print(f"graph.json: {len(graph.nodes)} nodes, {len(graph.edges)} edges")
-        proposed = [n["id"] for n in graph.nodes if n["status"] == "proposed"]
-        if proposed:
-            print(f"  {len(proposed)} proposed nodes await confirmation: {', '.join(proposed[:8])}{'…' if len(proposed) > 8 else ''}")
-        lonely = [n["id"] for n in graph.nodes if not graph.edges_of(n["id"])]
-        if lonely:
-            print(f"  {len(lonely)} nodes have no links: {', '.join(lonely[:8])}")
-    except (GraphError, FileNotFoundError, json.JSONDecodeError) as exc:
-        print(f"graph.json: {exc}")
-        ok = False
+    topics = workspace.topics()
+    if not topics:
+        print("no topics yet (no graph.json and no topics/<name>/graph.json): create one in the website or with `litgraph init`")
+    for topic in topics:
+        try:
+            graph = Graph.load(topic.graph_path)
+            print(f"topic {topic.slug}: {graph.title}: {len(graph.nodes)} nodes, {len(graph.edges)} edges{'; review.md written' if topic.review_path.exists() else ''}")
+            hard, soft = graph.check()
+            for message in hard:
+                print(f"  rule: {message}")
+            for message in soft[:10]:
+                print(f"  note: {message}")
+            proposed = [n["id"] for n in graph.nodes if n["status"] == "proposed"]
+            if proposed:
+                print(f"  {len(proposed)} proposed nodes await confirmation: {', '.join(proposed[:8])}{'…' if len(proposed) > 8 else ''}")
+            lonely = [n["id"] for n in graph.nodes if not graph.edges_of(n["id"])]
+            if lonely:
+                print(f"  {len(lonely)} nodes have no links: {', '.join(lonely[:8])}")
+            ok = ok and not hard
+        except (GraphError, FileNotFoundError, json.JSONDecodeError) as exc:
+            print(f"topic {topic.slug}: {exc}")
+            ok = False
     print(f"model: {workspace.model_label()} via {workspace.provider} (effort {workspace.effort})")
     inherited = workspace.inherited_anthropic_env()
     if workspace.provider == "claude-code" and inherited:
@@ -50,7 +60,7 @@ def cmd_check(args) -> int:
             if workspace.provider == "claude-code":
                 from litgraph.claude_code import ClaudeCodeAgent
                 from litgraph.store import GraphFile
-                agent = ClaudeCodeAgent(workspace, GraphFile(workspace.graph_path))
+                agent = ClaudeCodeAgent(workspace, GraphFile(workspace.graph_path))  # the first topic
                 events = list(agent.stream_answer("Reply with the single word ok, and use no tools."))
                 errors = [e["message"] for e in events if e["type"] == "error"]
                 if errors:
@@ -70,9 +80,8 @@ def cmd_check(args) -> int:
 def cmd_serve(args) -> int:
     from litgraph.server import create_app
     workspace = Workspace.load(args.workspace)
-    if not workspace.graph_path.exists():
-        print(f"No graph.json in {workspace.root}. Run `litgraph init` first, or pick the workspace with --workspace.")
-        return 1
+    if not workspace.topics():
+        print(f"No topics in {workspace.root} yet; the website will offer to create one. (Or run `litgraph init`.)")
     app = create_app(workspace)
     host, port = args.host or workspace.host, args.port or workspace.port
     url = f"http://{host}:{port}/"
@@ -93,7 +102,11 @@ def cmd_extract(args) -> int:
     if not ready:
         print(why)
         return 1
-    graph_file = GraphFile(workspace.graph_path)
+    topic = workspace.topic(args.topic)
+    if topic is None:
+        print("No such topic. `litgraph check` lists them.")
+        return 1
+    graph_file = GraphFile(topic.graph_path)
     agent = make_agent(workspace, graph_file)
     for file in args.files:
         path = Path(file)
@@ -110,9 +123,13 @@ def cmd_extract(args) -> int:
 def cmd_export(args) -> int:
     from litgraph.server import export_page
     workspace = Workspace.load(args.workspace)
-    out = Path(args.output or (workspace.root / "build" / "graph.html"))
+    topic = workspace.topic(args.topic)
+    if topic is None:
+        print("No such topic. `litgraph check` lists them.")
+        return 1
+    out = Path(args.output or (workspace.root / "build" / f"{topic.slug}.html"))
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(export_page(workspace, GraphFile(workspace.graph_path)), encoding="utf-8")
+    out.write_text(export_page(workspace, GraphFile(topic.graph_path)), encoding="utf-8")
     print(f"wrote {out}")
     return 0
 
@@ -136,6 +153,8 @@ def main(argv: list[str] | None = None) -> None:
             p.add_argument("--host"); p.add_argument("--port", type=int); p.add_argument("--no-open", action="store_true")
         if name == "check":
             p.add_argument("--no-model", action="store_true", help="skip the model call")
+        if name in ("extract", "export"):
+            p.add_argument("--topic", "-t", default=None, help="topic slug (default: the first topic)")
         if name == "extract":
             p.add_argument("files", nargs="+"); p.add_argument("--confirm", action="store_true", help="add as confirmed, not proposed")
         if name == "export":

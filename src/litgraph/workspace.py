@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import os
+import re
 import tomllib
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 
 DEFAULT_MODEL = "claude-opus-5-5"
@@ -13,6 +16,48 @@ ANTHROPIC_ENV = ("ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KE
                  "ANTHROPIC_DEFAULT_OPUS_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL",
                  "ANTHROPIC_SMALL_FAST_MODEL")
 STARTER_DIR = Path(__file__).parent / "starter"
+
+
+def topic_slug(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", str(text or "").lower()).strip("-")[:80]
+
+
+@dataclass
+class Topic:
+    """One topic of a workspace: a folder with graph.json, review.md and notes/."""
+
+    slug: str
+    folder: Path
+
+    @property
+    def graph_path(self) -> Path:
+        return self.folder / "graph.json"
+
+    @property
+    def review_path(self) -> Path:
+        return self.folder / "review.md"
+
+    @property
+    def notes_dir(self) -> Path:
+        return self.folder / "notes"
+
+    @property
+    def title(self) -> str:
+        try:
+            return str(json.loads(self.graph_path.read_text(encoding="utf-8")).get("title") or self.slug)
+        except (OSError, ValueError):
+            return self.slug
+
+    def describe(self) -> dict:
+        try:
+            data = json.loads(self.graph_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            data = {}
+        nodes = data.get("nodes") or []
+        return {"slug": self.slug, "title": str(data.get("title") or self.slug), "description": str(data.get("description") or ""),
+                "nodes": len(nodes), "edges": len(data.get("edges") or []), "proposed": sum(1 for n in nodes if n.get("status") == "proposed"),
+                "has_review": self.review_path.exists(),
+                "updated": datetime.fromtimestamp(self.graph_path.stat().st_mtime, timezone.utc).isoformat(timespec="seconds") if self.graph_path.exists() else ""}
 
 
 def load_env_file(path: Path) -> None:
@@ -52,11 +97,66 @@ class Workspace:
 
     @property
     def graph_path(self) -> Path:
-        return self.root / "graph.json"
+        """The first topic's graph (kept for single-topic commands)."""
+        topics = self.topics()
+        return topics[0].graph_path if topics else self.topics_dir / "main" / "graph.json"
 
     @property
-    def notes_dir(self) -> Path:
-        return self.root / "notes"
+    def topics_dir(self) -> Path:
+        return self.root / "topics"
+
+    def topics(self) -> list["Topic"]:
+        """Every topic: a root graph.json (slug `main`) and each topics/<slug>/graph.json."""
+        found = []
+        if (self.root / "graph.json").exists():
+            found.append(Topic("main", self.root))
+        if self.topics_dir.exists():
+            for folder in sorted(self.topics_dir.iterdir()):
+                if (folder / "graph.json").exists():
+                    found.append(Topic(folder.name, folder))
+        return found
+
+    def topic(self, slug: str | None) -> "Topic | None":
+        topics = self.topics()
+        if not slug:
+            return topics[0] if topics else None
+        return next((t for t in topics if t.slug == slug), None)
+
+    def find_topic(self, text: str) -> "Topic | None":
+        """A topic whose slug or title matches the text (case-insensitive, ignoring punctuation)."""
+        key = topic_slug(text)
+        if not key:
+            return None
+        for topic in self.topics():
+            if topic.slug == key or topic_slug(topic.title) == key:
+                return topic
+        # Looser: the same words, ignoring order and small words ("MD coarse graining & acceleration" opens
+        # "MD coarse-graining and acceleration for ion transport ...").
+        stop = {"a", "an", "the", "and", "or", "of", "for", "in", "on", "to", "with", "by", "vs", "versus"}
+        words = lambda text: {w for w in topic_slug(text).split("-") if w and w not in stop}  # noqa: E731
+        asked = words(text)
+        best, score = None, 0.0
+        for topic in self.topics():
+            have = words(topic.title) | words(topic.slug)
+            if not asked or not have:
+                continue
+            overlap = len(asked & have) / min(len(asked), len(have))
+            if overlap > score:
+                best, score = topic, overlap
+        return best if score >= 0.75 and len(asked) >= 2 else None
+
+    def create_topic(self, title: str, description: str = "") -> "Topic":
+        slug = topic_slug(title)
+        if not slug:
+            raise ValueError("A topic needs a name.")
+        folder = self.topics_dir / slug
+        if (folder / "graph.json").exists():
+            return Topic(slug, folder)
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "notes").mkdir(exist_ok=True)
+        graph = {"schema": "2.0", "title": title.strip(), "description": description.strip(), "nodes": [], "edges": []}
+        (folder / "graph.json").write_text(json.dumps(graph, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        return Topic(slug, folder)
 
     @property
     def agents_path(self) -> Path:
@@ -134,10 +234,10 @@ def init_workspace(target: Path, title: str = "My research graph") -> list[Path]
     """Create a new workspace from the starter files. Returns the files written."""
     target = Path(target)
     target.mkdir(parents=True, exist_ok=True)
-    (target / "notes").mkdir(exist_ok=True)
+    (target / "topics").mkdir(exist_ok=True)
     written = []
     for name, dest in (("litgraph.toml", "litgraph.toml"), ("AGENTS.md", "AGENTS.md"),
-                       ("env.example", ".env.example"), ("gitignore", ".gitignore"), ("graph.json", "graph.json")):
+                       ("env.example", ".env.example"), ("gitignore", ".gitignore")):
         path = target / dest
         if path.exists():
             continue

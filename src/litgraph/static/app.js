@@ -83,6 +83,7 @@ const state = {
   hiddenKinds: new Set(), hoverId: null, selectedId: null, pinnedId: null, transform: { x: 0, y: 0, k: 1 }, size: null, ratio: 1,
   pointer: null, viewTouched: false, colours: null, lastFocus: null, focusSince: 0, labelled: new Set(),
   health: { ai: false, model: "" }, busy: null, chatOpen: true, autoFollow: true, pendingLinks: [], editingId: null, highlight: new Set(),
+  topic: null, topics: [],
 };
 
 // ---------- theme ----------
@@ -105,6 +106,7 @@ applyTheme();
 // ---------- the graph ----------
 function indexGraph(payload, options = {}) {
   state.graph = payload.graph;
+  if (payload.topic) { state.topicInfo = payload.topic; updateTopicBar(); }
   state.nodeTypes = payload.node_types || state.nodeTypes;
   state.edgeTypes = payload.edge_types || state.edgeTypes;
   state.nodesById = new Map(state.graph.nodes.map((node) => [node.id, node]));
@@ -685,7 +687,7 @@ $("#edit-fill").addEventListener("click", async () => {
   if (!draft.label) { el.editError.textContent = "Give at least a label (a title, a name, or a sentence) for the AI to start from."; el.editError.hidden = false; return; }
   el.editError.hidden = true; button.disabled = true; button.textContent = "Filling in…";
   try {
-    const response = await fetch("/api/complete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ node: draft, links: state.pendingLinks.map((p) => ({ target: p.target, type: p.type, label: p.label })) }) });
+    const response = await fetch(withTopic("/api/complete"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ node: draft, links: state.pendingLinks.map((p) => ({ target: p.target, type: p.type, label: p.label })) }) });
     const reply = await response.json();
     if (!reply.ok) throw new Error(reply.message || "The AI could not fill this in.");
     const node = reply.node || {};
@@ -744,7 +746,7 @@ el.editForm.addEventListener("submit", async (event) => {
 // ---------- server ----------
 async function api(path, body, method = "POST", options = {}) {
   try {
-    const response = await fetch(path, { method, headers: body ? { "Content-Type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined });
+    const response = await fetch(withTopic(path), { method, headers: body ? { "Content-Type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined });
     const reply = await response.json();
     if (reply.graph) indexGraph(reply, { keepPositions: true });
     if (!reply.ok && !options.silent) addNotice(reply.message || "The server refused that.", true);
@@ -752,7 +754,7 @@ async function api(path, body, method = "POST", options = {}) {
   } catch (error) { if (!options.silent) addNotice(error.message, true); return null; }
 }
 async function reloadGraph(options = {}) {
-  const response = await fetch("/api/graph"); if (response.ok) indexGraph(await response.json(), options);
+  const response = await fetch(withTopic("/api/graph")); if (response.ok) indexGraph(await response.json(), options);
 }
 
 // ---------- chat ----------
@@ -761,8 +763,10 @@ function setChatOpen(open) {
   requestAnimationFrame(() => { if (state.graph) { resizeCanvas(); if (state.pinnedId) focusOn(state.pinnedId); else if (!state.viewTouched) fitGraph(); } });
 }
 el.openChat.addEventListener("click", () => setChatOpen(true)); el.closeChat.addEventListener("click", () => setChatOpen(false));
-function readMemory() { try { const parsed = JSON.parse(sessionStorage.getItem(MEMORY_KEY) || "[]"); return Array.isArray(parsed) ? parsed.slice(-MAX_MEMORY) : []; } catch { return []; } }
-function writeMemory(items) { try { sessionStorage.setItem(MEMORY_KEY, JSON.stringify(items.slice(-MAX_MEMORY))); } catch { /* ignore */ } }
+const memoryKey = () => `${MEMORY_KEY}:${state.topic || ""}`;
+function readMemory() { try { const parsed = JSON.parse(sessionStorage.getItem(memoryKey()) || "[]"); return Array.isArray(parsed) ? parsed.slice(-MAX_MEMORY) : []; } catch { return []; } }
+function writeMemory(items) { try { sessionStorage.setItem(memoryKey(), JSON.stringify(items.slice(-MAX_MEMORY))); } catch { /* ignore */ } }
+const withTopic = (path) => (state.topic ? `${path}${path.includes("?") ? "&" : "?"}topic=${encodeURIComponent(state.topic)}` : path);
 // A short name for a node in prompts and chips: its shortest alias, else the label cut at 60 characters.
 function shortLabel(node) {
   const alias = (node.aliases || []).filter((a) => a.length >= 3).sort((x, y) => x.length - y.length)[0];
@@ -904,8 +908,8 @@ function renderMarkdown(container, markdown) {
   container.replaceChildren(fragment);
 }
 
-async function streamAnswer(query, assistant, contextIds) {
-  const response = await fetch("/api/answer/stream", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query, history: readMemory(), context_ids: contextIds }) });
+async function streamAnswer(query, assistant, contextIds, mode = "chat") {
+  const response = await fetch(withTopic("/api/answer/stream"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query, history: mode === "build" ? [] : readMemory(), context_ids: contextIds, mode }) });
   if (!response.ok) { let message = "The research companion is not available."; try { message = (await response.json()).message || message; } catch { /* keep */ } throw new Error(message); }
   const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = ""; let answer = ""; let changed = false;
   while (true) {
@@ -926,15 +930,17 @@ async function streamAnswer(query, assistant, contextIds) {
   if (changed) { startPhysics(0.5); setTimeout(() => { state.highlight.clear(); draw(); }, 12000); }
   return answer;
 }
-async function submitQuestion(text, contextIds) {
+async function submitQuestion(text, contextIds, options = {}) {
   text = text.trim(); if (!text || state.busy) return;
+  const mode = options.mode || "chat";
   if (EXPORTED) { addNotice("This is an exported file: run `litgraph serve` for the research companion."); return; }
   if (!state.health.ai) { addNotice("No API key on the server: put ANTHROPIC_API_KEY in the workspace's .env and restart `litgraph serve`.", true); return; }
   const ids = contextIds || (state.selectedId ? [state.selectedId] : []);
   el.question.value = ""; resizeQuestion(); el.send.disabled = true; el.suggestions.hidden = true; state.busy = true;
-  addUserMessage(text); const assistant = addAssistantMessage();
+  addUserMessage(mode === "build" ? `Build a review of: ${text}` : text); const assistant = addAssistantMessage();
+  if (mode === "build") addStatus("Building the review from scratch: searching, then adding families, techniques, papers, claims and quantities. This takes a few minutes.");
   try {
-    const answer = await streamAnswer(text, assistant, ids);
+    const answer = await streamAnswer(text, assistant, ids, mode);
     const memory = readMemory(); memory.push({ role: "user", content: text }, { role: "assistant", content: answer }); writeMemory(memory);
   } catch (error) { assistant.article.classList.add("error"); assistant.body.textContent = error.message; }
   finally { state.busy = false; el.send.disabled = false; el.suggestions.hidden = false; el.question.focus(); scrollMessages(); }
@@ -959,20 +965,94 @@ function restoreConversation() {
   updateSuggestions(null); scrollMessages(true);
 }
 
+// ---------- topics: one graph and one review document per topic ----------
+async function loadTopics() {
+  try { const r = await fetch("/api/topics"); if (r.ok) state.topics = (await r.json()).topics || []; } catch { state.topics = []; }
+  const select = $("#topic-select"); select.replaceChildren();
+  for (const topic of state.topics) { const o = document.createElement("option"); o.value = topic.slug; o.textContent = topic.title; select.appendChild(o); }
+  if (state.topic) select.value = state.topic;
+  select.hidden = !state.topics.length;
+}
+function updateTopicBar() {
+  const info = state.topicInfo || state.topics.find((t) => t.slug === state.topic) || {};
+  document.title = `${info.title || state.health.title || "litgraph"} · litgraph`;
+  $("#keep-all").hidden = !(info.proposed > 0) || Boolean(EXPORTED);
+  $("#keep-all").textContent = `Keep all (${info.proposed || 0})`;
+  $("#write-review").hidden = Boolean(EXPORTED) || !state.graph?.nodes?.length;
+  $("#open-review").hidden = !info.has_review;
+  $("#graph-title").textContent = info.description || "";
+}
+async function switchTopic(slug, options = {}) {
+  state.topic = slug; state.selectedId = null; state.pinnedId = null; el.card.hidden = true; state.hiddenKinds.clear(); state.shown = null;
+  const url = new URL(window.location); url.searchParams.set("topic", slug); history.replaceState(null, "", url);
+  $("#topic-select").value = slug;
+  state.viewTouched = false; state.fitPending = true;
+  await reloadGraph();
+  updateContext(); restoreConversation(); updateTopicBar();
+  if (options.build) submitQuestion(options.build, [], { mode: "build" });
+}
+$("#topic-select").addEventListener("change", (event) => switchTopic(event.target.value));
+$("#new-topic").addEventListener("click", () => { $("#topic-name").value = ""; $("#topic-error").hidden = true; $("#topic-dialog").showModal(); $("#topic-name").focus(); });
+$("#topic-form").addEventListener("submit", async (event) => {
+  if (event.submitter?.value !== "open") return;
+  event.preventDefault();
+  const title = $("#topic-name").value.trim(); if (!title) return;
+  const button = $("#topic-open"); button.disabled = true;
+  try {
+    const r = await fetch("/api/topics", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title }) });
+    const reply = await r.json(); if (!reply.ok) throw new Error(reply.message || "Could not open the topic.");
+    await loadTopics(); $("#topic-dialog").close();
+    if (reply.created) { setChatOpen(true); await switchTopic(reply.topic.slug, { build: title }); }
+    else { await switchTopic(reply.topic.slug); addNotice(`Opened the existing topic "${reply.topic.title}".`); }
+  } catch (error) { $("#topic-error").textContent = error.message; $("#topic-error").hidden = false; }
+  finally { button.disabled = false; }
+});
+$("#keep-all").addEventListener("click", async () => { const reply = await api("/api/graph/keep_all", {}); if (reply?.ok) { addNotice(`Kept ${reply.changed} proposed node${reply.changed === 1 ? "" : "s"}.`); state.highlight.clear(); draw(); } });
+async function showReview(markdown) {
+  renderMarkdown($("#review-body"), markdown);
+  $("#review-download").href = `/api/topics/${encodeURIComponent(state.topic)}/review?download=1`;
+  $("#review-dialog").showModal();
+}
+$("#open-review").addEventListener("click", async () => {
+  const r = await fetch(`/api/topics/${encodeURIComponent(state.topic)}/review`); const reply = await r.json();
+  if (reply.ok) showReview(reply.markdown); else addNotice(reply.message || "No review yet.", true);
+});
+$("#write-review").addEventListener("click", async () => {
+  const button = $("#write-review"); if (button.disabled) return;
+  if (!window.confirm("Write the review document from the current graph? This replaces the saved review of this topic and takes a minute or two.")) return;
+  button.disabled = true; button.textContent = "Writing…"; const line = addStatus("Writing the review document from the graph…");
+  try {
+    const r = await fetch(`/api/topics/${encodeURIComponent(state.topic)}/review`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    const reply = await r.json(); if (!reply.ok) throw new Error(reply.message || "Could not write the review.");
+    line.textContent = "Review saved as review.md in the topic folder."; state.topicInfo = reply.topic; updateTopicBar(); showReview(reply.markdown);
+  } catch (error) { line.remove(); addNotice(error.message, true); }
+  finally { button.disabled = false; button.textContent = "Write review"; }
+});
+$("#review-close").addEventListener("click", () => $("#review-dialog").close());
+
 // ---------- start ----------
 async function initialize() {
   try {
     let payload = EXPORTED;
     if (!payload) {
-      const [graphResponse, healthResponse] = await Promise.all([fetch("/api/graph"), fetch("/api/health")]);
+      const healthResponse = await fetch("/api/health");
+      if (healthResponse.ok) state.health = await healthResponse.json();
+      await loadTopics();
+      const wanted = new URLSearchParams(window.location.search).get("topic");
+      state.topic = state.topics.some((t) => t.slug === wanted) ? wanted : state.topics[0]?.slug || null;
+      if (!state.topic) { // an empty workspace: offer to start the first topic
+        $("#topic-dialog").showModal(); $("#topic-name").focus();
+        readColours(); resizeCanvas(); el.chatModel.textContent = state.health.model || "Claude"; return;
+      }
+      $("#topic-select").value = state.topic;
+      const graphResponse = await fetch(withTopic("/api/graph"));
       if (!graphResponse.ok) throw new Error("The graph could not be loaded.");
       payload = await graphResponse.json();
-      if (healthResponse.ok) state.health = await healthResponse.json();
-    } else { $("#add-node").hidden = true; }
+    } else { $("#add-node").hidden = true; $("#new-topic").hidden = true; }
     el.chatModel.textContent = state.health.model ? state.health.model : "Claude";
     readColours(); resizeCanvas(); indexGraph(payload);
     state.transform = { x: el.stage.clientWidth / 2, y: el.stage.clientHeight / 2, k: 0.5 };
-    restoreConversation();
+    restoreConversation(); updateTopicBar();
     const focus = new URLSearchParams(window.location.search).get("focus");
     if (focus && state.nodesById.has(focus)) selectNode(focus, { fit: true });
     if (EXPORTED) { setChatOpen(false); el.openChat.hidden = true; }

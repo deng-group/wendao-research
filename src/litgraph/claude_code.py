@@ -14,19 +14,20 @@ import threading
 from typing import Iterator
 
 from litgraph import __version__
-from litgraph.agent import COMPLETE_INSTRUCTION, Agent, clean_completion, complete_schema, tool_definitions
+from litgraph.agent import BUILD_INSTRUCTION, COMPLETE_INSTRUCTION, REVIEW_INSTRUCTION, Agent, clean_completion, complete_schema, tool_definitions
 
 MAX_TURNS = 16
+BUILD_TURNS = 80
 SERVER = "litgraph"
 
 
 class ClaudeCodeAgent(Agent):
     """Answers through Claude Code. `client` is unused; the CLI's own sign-in is the credential."""
 
-    def _options(self, system: str, tools: list, events: "queue.Queue | None", structured: dict | None = None):
+    def _options(self, system: str, tools: list, events: "queue.Queue | None", structured: dict | None = None, max_turns: int = MAX_TURNS, web: bool | None = None):
         from claude_agent_sdk import ClaudeAgentOptions
 
-        builtin = ["WebSearch", "WebFetch"] if self.workspace.web_search else []
+        builtin = ["WebSearch", "WebFetch"] if (self.workspace.web_search if web is None else web) else []
         options = ClaudeAgentOptions(
             system_prompt=system,
             tools=builtin,
@@ -36,7 +37,7 @@ class ClaudeCodeAgent(Agent):
             setting_sources=[],  # the researcher's own CLAUDE.md and settings stay out of it
             permission_mode="dontAsk",
             include_partial_messages=True,
-            max_turns=MAX_TURNS,
+            max_turns=max_turns,
             cwd=self.workspace.root,
             env={"CLAUDE_AGENT_SDK_CLIENT_APP": f"litgraph/{__version__}"},
         )
@@ -90,7 +91,7 @@ class ClaudeCodeAgent(Agent):
         parts.append(query)
         return "\n".join(parts)
 
-    async def _run(self, prompt: str, events: queue.Queue, proposals: list[dict]) -> None:
+    async def _run(self, prompt: str, events: queue.Queue, proposals: list[dict], max_turns: int = MAX_TURNS) -> None:
         from claude_agent_sdk import AssistantMessage, ResultMessage, StreamEvent, TextBlock, ToolUseBlock, query
 
         try:
@@ -99,7 +100,7 @@ class ClaudeCodeAgent(Agent):
             ServerToolUseBlock = ()  # noqa: N806
         system = "\n\n".join(block["text"] for block in self.system())
         tools = self._tools(events, proposals)
-        options = self._options(system, tools, events)
+        options = self._options(system, tools, events, max_turns=max_turns)
         answer: list[str] = []
         streamed = False
         failed = False
@@ -144,14 +145,17 @@ class ClaudeCodeAgent(Agent):
         events.put({"type": "done", "answer": "".join(answer).strip(), "proposals": proposals,
                     "graph_version": self.graph_file.path.stat().st_mtime if self.graph_file.path.exists() else 0})
 
-    def stream_answer(self, query: str, history: list[dict] | None = None, context_ids: list[str] | None = None) -> Iterator[dict]:
+    def stream_answer(self, query: str, history: list[dict] | None = None, context_ids: list[str] | None = None, mode: str = "chat") -> Iterator[dict]:
         events: queue.Queue = queue.Queue()
         proposals: list[dict] = []
+        if mode == "build":
+            query = BUILD_INSTRUCTION + query
         prompt = self._prompt(query, history, context_ids)
+        max_turns = BUILD_TURNS if mode == "build" else MAX_TURNS
 
         def worker():
             try:
-                asyncio.run(self._run(prompt, events, proposals))
+                asyncio.run(self._run(prompt, events, proposals, max_turns))
             except Exception as exc:  # reported to the browser, not raised in the request thread
                 events.put({"type": "error", "message": f"{type(exc).__name__}: {exc}"})
             finally:
@@ -164,6 +168,25 @@ class ClaudeCodeAgent(Agent):
             if event is None:
                 break
             yield event
+
+    def write_review(self) -> str:
+        from claude_agent_sdk import AssistantMessage, ResultMessage, TextBlock, query
+
+        system = "\n\n".join(block["text"] for block in self.system())
+
+        async def run() -> str:
+            parts: list[str] = []
+            result = None
+            async for message in query(prompt=REVIEW_INSTRUCTION, options=self._options(system, [], None, max_turns=2, web=False)):
+                if isinstance(message, AssistantMessage) and not message.parent_tool_use_id:
+                    parts.extend(block.text for block in message.content if isinstance(block, TextBlock))
+                elif isinstance(message, ResultMessage):
+                    result = message
+            if result is None or result.is_error:
+                raise RuntimeError("Claude Code could not write the review: " + ("; ".join(result.errors or []) if result else "no result"))
+            return ("".join(parts).strip() or (result.result or "").strip()) + "\n"
+
+        return asyncio.run(run())
 
     def complete_node(self, draft: dict, links: list[dict] | None = None) -> dict:
         from claude_agent_sdk import ResultMessage, query

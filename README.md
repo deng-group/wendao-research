@@ -18,6 +18,10 @@ the starting point, not the boundary.
   can search Semantic Scholar / Crossref / arXiv for papers and the web for anything else, and proposes
   nodes and edges. Proposals appear in the graph at once, marked *proposed* (dashed ring), until you keep or
   discard them.
+- **Topics**: a workspace holds one graph and one review document per topic (`topics/<name>/graph.json`
+  and `review.md`). Type a topic in the website: an existing one opens; a new one is created and the
+  companion builds a first review of it from the literature, which you keep, edit, and save as a document
+  with **Write review**.
 - **`litgraph extract`**: turn a review or your notes into graph nodes and edges with the model.
 - **`litgraph export`**: the graph as one HTML file that opens without a server.
 
@@ -34,12 +38,11 @@ pip install -e .              # or `uv sync`
 ## Quick start
 
 ```bash
-litgraph init my-field        # a workspace: litgraph.toml, AGENTS.md, graph.json, notes/
+litgraph init my-field        # a workspace: litgraph.toml, AGENTS.md, topics/
 cd my-field
-# either write graph.json by hand / with the editor in the website,
-# or drop a review into notes/ and let the model extract a first graph:
-litgraph extract notes/review.md
-litgraph serve                # http://127.0.0.1:5058/
+litgraph serve                # http://127.0.0.1:5058/ ; type a topic to start the first review
+# or seed a topic from a document you already have:
+litgraph extract --topic my-topic review.md
 ```
 
 By default the chat runs through **Claude Code** with your own sign-in (the `claude` CLI; a claude.ai
@@ -49,10 +52,10 @@ with an API key instead, set `provider = "anthropic"` under `[model]` in `litgra
 
 ### The example
 
-`examples/md_coarse_graining/` is a built workspace: a review of molecular-dynamics coarse-graining and
-acceleration methods read against Li-ion transport in solid-state electrolytes, written in the five-level
-form (`notes/md_coarse_graining_review.md`) and as a graph: 7 families, 23 techniques, 20 papers, 14
-claims, 11 quantities.
+`examples/md_coarse_graining/` is a built workspace with one topic, `topics/md-coarse-graining/`: a review
+of molecular-dynamics coarse-graining and acceleration methods read against Li-ion transport in
+solid-state electrolytes, as a document in the five-level form (`review.md`) and as a graph (`graph.json`:
+7 families, 23 techniques, 20 papers, 14 claims, 11 quantities).
 
 ```bash
 cd examples/md_coarse_graining
@@ -123,7 +126,7 @@ initial review), `confirmed`, or `proposed`; `source` records where a node came 
 | `src/litgraph/literature.py` | Semantic Scholar, Crossref and arXiv lookups |
 | `src/litgraph/server.py` | Flask: the page, graph API, proposals, chat stream |
 | `src/litgraph/static/` | The website: canvas graph with its own force layout, node card, editor, chat |
-| `examples/md_coarse_graining/` | The example workspace |
+| `examples/md_coarse_graining/` | The example workspace (`topics/<name>/graph.json` and `review.md` per topic) |
 | `tests/` | Unit tests; the agent is tested against a local fake of the Messages API |
 
 ```bash

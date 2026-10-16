@@ -26,8 +26,9 @@ def fake_search(query, limit=8, providers=None):
 class AgentTests(unittest.TestCase):
     def setUp(self):
         self.folder = tempfile.mkdtemp()
-        for name in ("graph.json", "litgraph.toml", "AGENTS.md"):
+        for name in ("litgraph.toml", "AGENTS.md"):
             shutil.copy(EXAMPLE / name, self.folder)
+        shutil.copytree(EXAMPLE / "topics", Path(self.folder) / "topics")
         self.workspace = Workspace.load(self.folder)
         self.workspace.web_search = False
         self.workspace.provider = "anthropic"  # these tests use the fake Messages API
@@ -129,6 +130,36 @@ class AgentTests(unittest.TestCase):
         self.assertEqual([(e["target"], e["incoming"]) for e in reply["edges"]], [("family:f", True), ("technique:flow-matching", False)])
         self.assertEqual(fake.requests[0]["output_config"]["format"]["type"], "json_schema")
         self.assertNotIn("propose_graph_changes", [t.get("name") for t in fake.requests[0]["tools"]])
+
+    def test_topics_open_create_review_and_keep_all(self):
+        os.environ["ANTHROPIC_API_KEY"] = "test"
+        review = "# MD coarse-graining\n\n## Level 1: method families\n\n| Family | Keeps |\n|---|---|\n| A | x |\n"
+        with FakeAnthropic([[{"text": review}]]) as fake:
+            app = create_app(self.workspace, client=self.client_for(fake))
+            client = app.test_client()
+            topics = client.get("/api/topics").get_json()["topics"]
+            self.assertEqual([t["slug"] for t in topics], ["md-coarse-graining"])
+            self.assertTrue(topics[0]["has_review"])
+            # an existing topic opens by a loose name; a new one is created
+            reply = client.post("/api/topics", json={"title": "MD coarse graining & acceleration for ion transport in solid state electrolytes"}).get_json()
+            self.assertFalse(reply["created"]); self.assertEqual(reply["topic"]["slug"], "md-coarse-graining")
+            reply = client.post("/api/topics", json={"title": "Grain-boundary diffusion"}).get_json()
+            self.assertTrue(reply["created"]); self.assertEqual(reply["topic"]["slug"], "grain-boundary-diffusion")
+            self.assertTrue((Path(self.folder) / "topics" / "grain-boundary-diffusion" / "graph.json").exists())
+            self.assertEqual(client.get("/api/graph?topic=grain-boundary-diffusion").get_json()["graph"]["nodes"], [])
+            self.assertEqual(client.get("/api/graph?topic=nope").status_code, 404)
+            # the review is written from the graph and saved
+            self.assertEqual(client.post("/api/topics/grain-boundary-diffusion/review", json={}).status_code, 400)  # empty graph
+            reply = client.post("/api/topics/md-coarse-graining/review", json={}).get_json()
+            self.assertTrue(reply["ok"]); self.assertIn("Level 1", reply["markdown"])
+            self.assertEqual((Path(self.folder) / "topics" / "md-coarse-graining" / "review.md").read_text(encoding="utf-8"), review)
+            self.assertIn("Level 1", client.get("/api/topics/md-coarse-graining/review").get_json()["markdown"])
+            self.assertEqual(client.get("/api/topics/md-coarse-graining/review?download=1").headers["Content-Disposition"], 'attachment; filename="md-coarse-graining-review.md"')
+            self.assertNotIn("tools", fake.requests[0])
+            # keep all
+            client.post("/api/graph/status", json={"topic": "md-coarse-graining", "ids": ["paper:nam2025-liflow"], "status": "proposed"})
+            reply = client.post("/api/graph/keep_all", json={"topic": "md-coarse-graining"}).get_json()
+            self.assertEqual(reply["changed"], 1); self.assertEqual(reply["topic"]["proposed"], 0)
 
     def test_literature_formatting_without_network(self):
         text = literature.format_results(fake_search("q"))

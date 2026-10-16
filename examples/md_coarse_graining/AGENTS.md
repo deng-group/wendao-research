@@ -7,7 +7,7 @@ molecular dynamics. The question behind this graph: can we learn an efficient re
 model from atomistic simulations that predicts accurately at larger spatial and temporal scales? The target
 quantities are diffusivity, ionic conductivity, hop rates, migration pathways and correlated migration.
 
-The seed of the graph is a literature review (notes/md_coarse_graining_review.md) written in the five-level
+The seed of the graph is a literature review (topics/md-coarse-graining/review.md) written in the five-level
 schema (docs/GRAPH_SCHEMA.md): seven method families A to G, techniques, papers, claims, quantities. Keep
 the families when adding papers: a paper is `contains`-linked from exactly one family and `uses` the
 techniques it applies. A paper's `learns`, `discards` and `validated_at` fields are what I compare across
