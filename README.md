@@ -8,9 +8,12 @@ It grew out of [Wendao](https://github.com/deng-group/wendao), the AI learning c
 Wendao's agent answers only from the course materials; litgraph's agent is meant to go further: the graph is
 the starting point, not the boundary.
 
-- **Interactive knowledge graph**: research questions, goals, method families, papers, methods, concepts,
-  open problems and applications, linked by typed edges (`contains`, `uses`, `extends`, `contrasts`, …).
-  Drag, zoom, search; click a node for its summary, metadata, DOI and links; edit or add nodes by hand.
+- **Interactive knowledge graph in five levels**: method families, techniques, papers, claims and
+  quantities, linked by typed edges (`contains`, `uses`, `extends`, `contrasts`, `supports`, `validates`, …).
+  Show any subset of the levels; hidden levels leave dashed bridges between what they connected. Click a
+  node for its structured record (a paper's learns / discards / validated-at, a claim's status and evidence,
+  a quantity's definition); edit or add nodes by hand. The schema is in
+  [docs/GRAPH_SCHEMA.md](docs/GRAPH_SCHEMA.md).
 - **Research companion** on the right: ask about any node or about the field. The agent reads the whole graph,
   can search Semantic Scholar / Crossref / arXiv for papers and the web for anything else, and proposes
   nodes and edges. Proposals appear in the graph at once, marked *proposed* (dashed ring), until you keep or
@@ -47,8 +50,9 @@ with an API key instead, set `provider = "anthropic"` under `[model]` in `litgra
 ### The example
 
 `examples/md_coarse_graining/` is a built workspace: a review of molecular-dynamics coarse-graining and
-acceleration methods (seven method families, about twenty papers) read against Li-ion transport in
-solid-state electrolytes. The graph was written from the review by hand (51 nodes, 107 edges).
+acceleration methods read against Li-ion transport in solid-state electrolytes, written in the five-level
+form (`notes/md_coarse_graining_review.md`) and as a graph: 7 families, 23 techniques, 20 papers, 14
+claims, 11 quantities.
 
 ```bash
 cd examples/md_coarse_graining
@@ -77,8 +81,10 @@ With either, the request carries:
 - tools: `find_nodes`, `read_node`, `search_literature` (Semantic Scholar → Crossref → arXiv, no key needed),
   `propose_graph_changes`, and Anthropic's server-side `web_search` and `web_fetch`.
 
-`propose_graph_changes` validates the change on a copy first (unknown ids, bad types) so the model can fix
-it, then writes it to `graph.json` with status `proposed`. Every write keeps a `graph.backup.json`. With
+`propose_graph_changes` applies the change to a copy first and checks the schema's rules (a paper needs
+exactly one family, at least one technique and its structured fields; a claim a status and an `about` edge;
+a quantity a definition and a level). A proposal that breaks a rule is returned to the model with the reasons
+and nothing is written; one that passes goes into `graph.json` with status `proposed`. Every write keeps a `graph.backup.json`. With
 `auto_apply = true` in `litgraph.toml` additions go in as confirmed.
 
 If your shell exports `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` or `ANTHROPIC_MODEL` (a relay to another
@@ -91,20 +97,21 @@ and only matters for `provider = "anthropic"`.
 
 ## Graph format
 
-`graph.json`:
+`graph.json` (schema 2.0; the full definition, fields and rules are in [docs/GRAPH_SCHEMA.md](docs/GRAPH_SCHEMA.md)):
 
 ```json
-{"schema": "1.0", "title": "…", "description": "…",
- "nodes": [{"id": "paper:nam2025-liflow", "type": "paper", "label": "LiFlow …", "summary": "…",
-            "year": 2025, "authors": "…", "venue": "…", "doi": "…", "aliases": ["LiFlow"],
+{"schema": "2.0", "title": "…", "description": "the research question",
+ "nodes": [{"id": "paper:nam2025-liflow", "type": "paper", "label": "…", "summary": "…",
+            "year": 2025, "authors": "…", "venue": "…", "doi": "…",
+            "learns": "…", "discards": "…", "validated_at": ["transport", "structural"],
             "status": "seed", "source": "review"}],
- "edges": [{"source": "category:f", "target": "paper:nam2025-liflow", "type": "contains", "label": ""}]}
+ "edges": [{"source": "family:f", "target": "paper:nam2025-liflow", "type": "contains", "label": ""}]}
 ```
 
-Node types: `question`, `goal`, `category`, `paper`, `method`, `concept`, `challenge`, `application`, `note`.
-Edge types: `contains`, `addresses`, `uses`, `serves`, `extends`, `contrasts`, `relates`, `applies_to`,
-`raises`, `validates`. `status` is `seed` (from the initial review), `confirmed`, or `proposed`;
-`source` records where a node came from (`review`, `chat`, `search`, `manual`, `extract`).
+Levels: `family`, `technique`, `paper`, `claim`, `quantity`. Edge types: `contains`, `uses`, `extends`,
+`contrasts`, `supports`, `contradicts`, `about`, `validates`, `relates`. `status` is `seed` (from the
+initial review), `confirmed`, or `proposed`; `source` records where a node came from (`review`, `chat`,
+`search`, `manual`, `extract`). `litgraph check` reports every rule violation.
 
 ## Layout
 

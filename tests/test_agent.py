@@ -43,10 +43,15 @@ class AgentTests(unittest.TestCase):
     def test_tool_loop_searches_and_proposes(self):
         replies = [
             [{"text": "Let me look."}, {"tool": "search_literature", "input": {"query": "ion hop diffusion model", "limit": 3}}],
+            # first proposal breaks the rules (no family, no technique, no fields): returned to the model, nothing written
             [{"tool": "propose_graph_changes", "input": {"reason": "A relevant generative model.", "nodes": [
-                {"id": "paper:person2024-hops", "type": "paper", "label": "Diffusion models for ion hops", "summary": "Learns hop statistics.", "year": 2024, "doi": "10.1000/fake"}],
-                "edges": [{"source": "category:f", "target": "paper:person2024-hops", "type": "contains"},
-                          {"source": "paper:person2024-hops", "target": "LiFlow: flow matching for accelerated simulation of atomic transport", "type": "contrasts", "label": "hops vs displacements"}]}}],
+                {"id": "paper:person2024-hops", "type": "paper", "label": "Diffusion models for ion hops", "summary": "Learns hop statistics.", "year": 2024, "doi": "10.1000/fake"}]}}],
+            [{"tool": "propose_graph_changes", "input": {"reason": "A relevant generative model.", "nodes": [
+                {"id": "paper:person2024-hops", "type": "paper", "label": "Diffusion models for ion hops", "summary": "Learns hop statistics.", "year": 2024, "doi": "10.1000/fake",
+                 "authors": "A. Person, B. Other", "venue": "J. Fake", "learns": "hop statistics", "discards": "lattice motion", "validated_at": ["kinetic"]}],
+                "edges": [{"source": "family:f", "target": "paper:person2024-hops", "type": "contains"},
+                          {"source": "paper:person2024-hops", "target": "technique:flow-matching", "type": "uses"},
+                          {"source": "paper:person2024-hops", "target": "LiFlow", "type": "contrasts", "label": "hops vs displacements"}]}}],
             [{"text": "Added one paper [paper:person2024-hops]."}],
         ]
         with FakeAnthropic(replies) as fake, mock.patch.object(literature, "search", fake_search):
@@ -65,38 +70,42 @@ class AgentTests(unittest.TestCase):
         # what the model saw: the graph in the system prompt, the selected node in the user turn, the tool results
         first = fake.requests[0]
         self.assertIn("paper:nam2025-liflow", first["system"][1]["text"])
-        self.assertIn("Selected in the graph: LiFlow", first["messages"][-1]["content"])
+        self.assertIn("(LiFlow) [paper:nam2025-liflow]", first["messages"][-1]["content"])
         self.assertEqual(first["output_config"], {"effort": "medium"})
         second = fake.requests[1]
         self.assertIn("Diffusion models for ion hops", second["messages"][-1]["content"][0]["content"])
-        self.assertEqual(len(fake.requests), 3)
+        rejected = fake.requests[2]["messages"][-1]["content"][0]["content"]
+        self.assertIn("Nothing was written", rejected)
+        self.assertIn("exactly one `contains` edge", rejected)
+        self.assertEqual(len(fake.requests), 4)
+        self.assertEqual(len([e for e in events if e["type"] == "proposal"]), 1)
 
     def test_server_streams_and_decides_proposals(self):
         os.environ["ANTHROPIC_API_KEY"] = "test"
         replies = [
-            [{"tool": "propose_graph_changes", "input": {"reason": "r", "nodes": [{"type": "concept", "label": "Brand new concept", "summary": "s"}],
-                                                       "edges": [{"source": "Brand new concept", "target": "concept:msm", "type": "relates"}]}}],
+            [{"tool": "propose_graph_changes", "input": {"reason": "r", "nodes": [{"type": "claim", "label": "Brand new claim", "summary": "s", "claim_status": "open"}],
+                                                       "edges": [{"source": "Brand new claim", "target": "technique:markov-state-model", "type": "about"}]}}],
             [{"text": "Done."}],
         ]
         with FakeAnthropic(replies) as fake:
             app = create_app(self.workspace, client=self.client_for(fake))
             client = app.test_client()
-            self.assertEqual(client.get("/api/health").get_json()["nodes"], 51)
+            self.assertEqual(client.get("/api/health").get_json()["nodes"], 75)
             response = client.post("/api/answer/stream", json={"query": "add it", "history": [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "hello"}]})
             lines = [json.loads(line) for line in response.get_data(as_text=True).splitlines() if line.strip()]
             proposal = next(line["proposal"] for line in lines if line["type"] == "proposal")
-            self.assertEqual(proposal["added_nodes"], ["concept:brand-new-concept"])
+            self.assertEqual(proposal["added_nodes"], ["claim:brand-new-claim"])
             self.assertEqual(client.get("/api/graph").get_json()["graph"]["nodes"][-1]["status"], "proposed")
             reply = client.post(f"/api/proposals/{proposal['id']}/discard").get_json()
             self.assertTrue(reply["ok"])
-            self.assertIsNone(self.graph_file.graph.node("concept:brand-new-concept"))
+            self.assertIsNone(self.graph_file.graph.node("claim:brand-new-claim"))
             # manual editing
-            reply = client.post("/api/graph/nodes", json={"type": "method", "label": "My method", "summary": "mine"}).get_json()
+            reply = client.post("/api/graph/nodes", json={"type": "technique", "label": "My technique", "summary": "mine"}).get_json()
             self.assertTrue(reply["created"])
-            reply = client.post("/api/graph/edges", json={"source": "method:my-method", "target": "category:e", "type": "relates", "label": "x"}).get_json()
+            reply = client.post("/api/graph/edges", json={"source": "family:e", "target": "technique:my-technique", "type": "contains"}).get_json()
             self.assertTrue(reply["ok"])
-            self.assertEqual(client.delete("/api/graph/nodes/method:my-method").status_code, 200)
-            self.assertEqual(client.delete("/api/graph/nodes/method:my-method").status_code, 404)
+            self.assertEqual(client.delete("/api/graph/nodes/technique:my-technique").status_code, 200)
+            self.assertEqual(client.delete("/api/graph/nodes/technique:my-technique").status_code, 404)
             page = client.get("/").get_data(as_text=True)
             self.assertIn("MD coarse-graining", page)
 

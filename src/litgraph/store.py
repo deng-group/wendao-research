@@ -1,8 +1,7 @@
 """The knowledge graph on disk: graph.json, its schema, validation, and edits.
 
-A graph has nodes (papers, methods, concepts, ...) and edges (typed, labelled links).
-Every node and edge records where it came from (`source`: the review, a chat, a search,
-or a manual edit) and whether it has been confirmed by the researcher (`status`).
+Five levels of nodes (family, technique, paper, claim, quantity) and typed edges; see docs/GRAPH_SCHEMA.md.
+Every node records where it came from (`source`) and whether the researcher has confirmed it (`status`).
 """
 
 from __future__ import annotations
@@ -15,33 +14,42 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-GRAPH_SCHEMA = "1.0"
+GRAPH_SCHEMA = "2.0"
 
+# The five levels, in order.
 NODE_TYPES = {
-    "question": "Research question",
-    "goal": "Goal",
-    "category": "Method family",
+    "family": "Method family",
+    "technique": "Technique",
     "paper": "Paper",
-    "method": "Method",
-    "concept": "Concept",
-    "challenge": "Open problem",
-    "application": "Application",
-    "note": "Note",
+    "claim": "Claim",
+    "quantity": "Quantity",
 }
 EDGE_TYPES = {
-    "contains": "contains",          # category -> paper / method
-    "addresses": "addresses",        # paper / method -> goal / question / challenge
-    "uses": "uses",                  # paper / method -> concept / method
-    "serves": "serves",              # category -> goal
-    "extends": "extends",            # paper -> paper (builds on)
-    "contrasts": "contrasts with",   # paper <-> paper, concept <-> concept
-    "relates": "relates to",         # anything, with a label
-    "applies_to": "applies to",      # method / category -> application
-    "raises": "raises",              # category / paper -> challenge
-    "validates": "validated by",     # method -> concept (validation metric)
+    "contains": "contains",          # family -> technique / paper
+    "uses": "uses",                  # paper -> technique
+    "extends": "extends",            # paper -> paper, technique -> technique
+    "contrasts": "contrasts with",   # paper <-> paper, technique <-> technique, family <-> family
+    "supports": "supports",          # paper -> claim
+    "contradicts": "contradicts",    # paper -> claim
+    "about": "is about",             # claim -> technique / family / quantity
+    "validates": "validates",        # paper -> quantity
+    "relates": "relates to",         # anything, labelled
 }
+VALIDATION_LEVELS = ("structural", "thermodynamic", "kinetic", "transport", "mechanistic")
+CLAIM_STATUSES = ("supported", "contradicted", "contested", "hypothesis", "open")
 STATUSES = {"seed", "confirmed", "proposed"}
 SOURCES = {"review", "chat", "search", "manual", "extract"}
+
+# Extra fields per type, beyond id/type/label/summary/aliases/tags/status/source. (required, optional)
+TYPE_FIELDS = {
+    "family": ((), ("relevance",)),
+    "technique": ((), ("reference",)),
+    "paper": (("year", "authors", "venue", "learns", "discards", "validated_at"), ("doi", "url", "priority", "notes")),
+    "claim": (("claim_status",), ("scope",)),
+    "quantity": (("definition", "level"), ("symbol", "units")),
+}
+LIST_FIELDS = {"aliases", "tags", "validated_at"}
+INT_FIELDS = {"year", "relevance", "priority"}
 
 
 class GraphError(ValueError):
@@ -56,6 +64,14 @@ def now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
+def _as_list(value) -> list[str]:
+    if value in (None, ""):
+        return []
+    if isinstance(value, str):
+        value = [part for part in re.split(r"[,;]", value)]
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
 def clean_node(raw: dict, *, default_status: str = "confirmed", default_source: str = "manual") -> dict:
     """A node with every field checked and defaults filled in. Raises GraphError on a bad one."""
     if not isinstance(raw, dict):
@@ -63,7 +79,7 @@ def clean_node(raw: dict, *, default_status: str = "confirmed", default_source: 
     label = str(raw.get("label", "")).strip()
     if not label:
         raise GraphError("A node needs a label.")
-    node_type = str(raw.get("type", "concept")).strip().lower()
+    node_type = str(raw.get("type", "")).strip().lower()
     if node_type not in NODE_TYPES:
         raise GraphError(f"Unknown node type `{node_type}` for `{label}`; use one of {', '.join(NODE_TYPES)}.")
     node_id = str(raw.get("id") or f"{node_type}:{slug(label)}").strip()
@@ -72,22 +88,38 @@ def clean_node(raw: dict, *, default_status: str = "confirmed", default_source: 
         "type": node_type,
         "label": label,
         "summary": str(raw.get("summary", "")).strip(),
-        "aliases": [str(a).strip() for a in raw.get("aliases", []) if str(a).strip()],
+        "aliases": _as_list(raw.get("aliases")),
         "status": raw.get("status") if raw.get("status") in STATUSES else default_status,
         "source": raw.get("source") if raw.get("source") in SOURCES else default_source,
-        "tags": [str(t).strip() for t in raw.get("tags", []) if str(t).strip()],
+        "tags": _as_list(raw.get("tags")),
         "created": str(raw.get("created") or now()),
     }
-    for key in ("year", "authors", "venue", "doi", "url", "notes", "key"):
+    required, optional = TYPE_FIELDS[node_type]
+    for key in (*required, *optional):
         value = raw.get(key)
-        if value not in (None, "", []):
-            node[key] = value if key == "year" and isinstance(value, int) else str(value).strip()
-    if "year" in node and not isinstance(node["year"], int):
-        match = re.search(r"\d{4}", node["year"])
-        if match:
-            node["year"] = int(match.group())
+        if value in (None, "", []):
+            continue
+        if key in LIST_FIELDS:
+            node[key] = _as_list(value)
+        elif key in INT_FIELDS:
+            match = re.search(r"\d{1,4}", str(value))
+            if match:
+                node[key] = int(match.group())
         else:
-            del node["year"]
+            node[key] = str(value).strip()
+    if node_type == "paper" and "validated_at" in node:
+        bad = [level for level in node["validated_at"] if level.lower() not in VALIDATION_LEVELS]
+        if bad:
+            raise GraphError(f"`{label}`: validated_at must use {', '.join(VALIDATION_LEVELS)}, not {', '.join(bad)}.")
+        node["validated_at"] = [level.lower() for level in node["validated_at"]]
+    if node_type == "quantity" and "level" in node and node["level"].lower() not in VALIDATION_LEVELS:
+        raise GraphError(f"`{label}`: level must be one of {', '.join(VALIDATION_LEVELS)}.")
+    if node_type == "quantity" and "level" in node:
+        node["level"] = node["level"].lower()
+    if node_type == "claim" and "claim_status" in node and node["claim_status"].lower() not in CLAIM_STATUSES:
+        raise GraphError(f"`{label}`: claim_status must be one of {', '.join(CLAIM_STATUSES)}.")
+    if node_type == "claim" and "claim_status" in node:
+        node["claim_status"] = node["claim_status"].lower()
     return node
 
 
@@ -205,25 +237,81 @@ class Graph:
             for edge in self.edges
         )
 
+    # ---------- the rules (docs/GRAPH_SCHEMA.md) ----------
+    def check(self, node_ids: list[str] | None = None) -> tuple[list[str], list[str]]:
+        """(hard problems, soft problems) for the nodes given (default: all). Hard problems block a proposal."""
+        hard, soft = [], []
+        nodes = [n for n in self.nodes if node_ids is None or n["id"] in node_ids]
+        by_label: dict[str, str] = {}
+        for node in self.nodes:
+            for name in (node["label"], *node["aliases"]):
+                key = name.lower()
+                if key in by_label and by_label[key] != node["id"] and (node_ids is None or node["id"] in node_ids):
+                    soft.append(f"`{node['id']}` shares the name `{name}` with `{by_label[key]}`.")
+                by_label.setdefault(key, node["id"])
+        for node in nodes:
+            nid, kind = node["id"], node["type"]
+            edges = self.edges_of(nid)
+            incoming = lambda t: [e for e in edges if e["type"] == t and e["target"] == nid]  # noqa: E731
+            outgoing = lambda t: [e for e in edges if e["type"] == t and e["source"] == nid]  # noqa: E731
+            if kind == "paper":
+                families = [e for e in incoming("contains") if (self.node(e["source"]) or {}).get("type") == "family"]
+                if len(families) != 1:
+                    hard.append(f"Paper `{nid}` must have exactly one `contains` edge from a family (has {len(families)}).")
+                if not outgoing("uses"):
+                    hard.append(f"Paper `{nid}` must `use` at least one technique.")
+                missing = [k for k in ("year", "authors", "venue", "learns", "discards", "validated_at") if not node.get(k)]
+                if missing:
+                    hard.append(f"Paper `{nid}` is missing {', '.join(missing)}.")
+            elif kind == "technique":
+                families = [e for e in incoming("contains") if (self.node(e["source"]) or {}).get("type") == "family"]
+                if not families:
+                    hard.append(f"Technique `{nid}` must have a `contains` edge from a family.")
+                used = incoming("uses") or [e for e in edges if e["type"] == "extends"]
+                if not used and not any(n.get("reference") == nid for n in self.nodes):
+                    hard.append(f"Technique `{nid}` must be used by at least one paper.")
+            elif kind == "claim":
+                if not node.get("claim_status"):
+                    hard.append(f"Claim `{nid}` needs claim_status ({', '.join(CLAIM_STATUSES)}).")
+                if not outgoing("about"):
+                    hard.append(f"Claim `{nid}` must have an `about` edge to a technique, family or quantity.")
+                if node.get("claim_status") not in ("open", "hypothesis") and not (incoming("supports") or incoming("contradicts")):
+                    hard.append(f"Claim `{nid}` with status {node.get('claim_status')} needs a `supports` or `contradicts` edge from a paper.")
+            elif kind == "quantity":
+                missing = [k for k in ("definition", "level") if not node.get(k)]
+                if missing:
+                    hard.append(f"Quantity `{nid}` is missing {', '.join(missing)}.")
+            elif kind == "family":
+                if not node["summary"]:
+                    hard.append(f"Family `{nid}` needs a summary (what it keeps, discards, still computes).")
+        for edge in self.edges:
+            if node_ids is not None and edge["source"] not in node_ids and edge["target"] not in node_ids:
+                continue
+            if edge["type"] in ("contrasts", "relates") and not edge["label"]:
+                soft.append(f"Edge {edge['source']} -{edge['type']}-> {edge['target']} needs a label.")
+        return hard, soft
+
     # ---------- editing ----------
     def upsert_node(self, raw: dict, *, status: str = "confirmed", source: str = "manual") -> tuple[dict, bool]:
         """Add a node, or update the fields given for an existing id. Returns (node, created)."""
         node = clean_node(raw, default_status=status, default_source=source)
         existing = self.node(node["id"])
         if existing is None:
-            # A new node whose label matches an existing one is the same thing: update it instead.
+            # A new node whose label matches an existing one of the same type is the same thing: update it instead.
             match = next((n for n in self.nodes if n["label"].lower() == node["label"].lower() and n["type"] == node["type"]), None)
             if match is not None:
                 existing = match
         if existing is None:
             self.nodes.append(node)
             return node, True
+        if existing["type"] != node["type"] and "type" in raw:
+            existing["type"] = node["type"]
         for key, value in node.items():
-            if key in ("id", "created", "status", "source"):
+            if key in ("id", "created", "status", "source", "type"):
                 continue
             if key in ("aliases", "tags"):
                 existing[key] = sorted(set(existing.get(key, [])) | set(value))
-            elif value not in ("", None) and (key in raw or key not in existing):
+            elif value not in ("", None, []) and (key in raw or key not in existing):
                 existing[key] = value
         if raw.get("status") in STATUSES:
             existing["status"] = raw["status"]
@@ -268,6 +356,19 @@ class Graph:
                 changed += 1
         return changed
 
+    def resolve(self, ref: str, by_label: dict[str, str] | None = None) -> str:
+        """A node id from an id, a label or an alias (case-insensitive); the text itself if nothing matches."""
+        ref = str(ref or "").strip()
+        if self.node(ref):
+            return ref
+        low = ref.lower()
+        if by_label and low in by_label:
+            return by_label[low]
+        for node in self.nodes:
+            if node["label"].lower() == low or low in (alias.lower() for alias in node["aliases"]):
+                return node["id"]
+        return ref
+
     def apply(self, change: dict, *, status: str = "confirmed", source: str = "chat") -> dict:
         """Apply a change set {nodes: [...], edges: [...], remove_nodes: [...], remove_edges: [...]}.
 
@@ -286,24 +387,11 @@ class Graph:
             if raw.get("id"):
                 by_label[str(raw["id"]).lower()] = node["id"]
             report["added_nodes" if created else "updated_nodes"].append(node["id"])
-
-        def resolve(ref: str) -> str:
-            ref = str(ref or "").strip()
-            if self.node(ref):
-                return ref
-            if ref.lower() in by_label:
-                return by_label[ref.lower()]
-            low = ref.lower()
-            for node in self.nodes:  # an exact label or alias, case-insensitive
-                if node["label"].lower() == low or low in (alias.lower() for alias in node["aliases"]):
-                    return node["id"]
-            return ref
-
         for raw in change.get("edges", []) or []:
             if not isinstance(raw, dict):
                 report["errors"].append("An edge must be an object.")
                 continue
-            raw = {**raw, "source": resolve(raw.get("source", "")), "target": resolve(raw.get("target", ""))}
+            raw = {**raw, "source": self.resolve(raw.get("source", ""), by_label), "target": self.resolve(raw.get("target", ""), by_label)}
             try:
                 edge, created = self.add_edge(raw, status=status, source=source)
             except GraphError as exc:
@@ -311,31 +399,44 @@ class Graph:
                 continue
             report["added_edges" if created else "updated_edges"].append([edge["source"], edge["target"], edge["type"]])
         for node_id in change.get("remove_nodes", []) or []:
-            if self.remove_node(resolve(node_id)):
+            if self.remove_node(self.resolve(node_id, by_label)):
                 report["removed_nodes"].append(node_id)
         for raw in change.get("remove_edges", []) or []:
-            if isinstance(raw, dict) and self.remove_edge(resolve(raw.get("source", "")), resolve(raw.get("target", "")), raw.get("type")):
+            if isinstance(raw, dict) and self.remove_edge(self.resolve(raw.get("source", ""), by_label), self.resolve(raw.get("target", ""), by_label), raw.get("type")):
                 report["removed_edges"].append([raw.get("source"), raw.get("target")])
         return report
 
     # ---------- for the model ----------
-    def outline(self, max_summary: int = 220) -> str:
-        """The whole graph as compact text for the model's context: nodes by type, then edges."""
-        lines = [f"# {self.title}", self.description.strip(), "", "## Nodes (id | label | summary)"]
+    def outline(self, max_summary: int = 240) -> str:
+        """The whole graph as compact text for the model's context: nodes by level, then edges."""
+        lines = [f"# {self.title}", self.description.strip(), "", "## Nodes, by level (id | label | fields | summary)"]
         for node_type, title in NODE_TYPES.items():
             nodes = [node for node in self.nodes if node["type"] == node_type]
             if not nodes:
                 continue
             lines.append(f"### {title}")
             for node in nodes:
-                meta = " ".join(filter(None, [
-                    f"({node['year']})" if node.get("year") else "",
-                    f"[{node['status']}]" if node["status"] != "confirmed" else "",
-                ]))
+                bits = []
+                if node_type == "paper":
+                    bits.append(f"{node.get('authors', '?')} ({node.get('year', '?')}), {node.get('venue', '?')}")
+                    if node.get("learns"):
+                        bits.append(f"learns: {node['learns']}")
+                    if node.get("discards"):
+                        bits.append(f"discards: {node['discards']}")
+                    if node.get("validated_at"):
+                        bits.append("validated at: " + ", ".join(node["validated_at"]))
+                elif node_type == "claim":
+                    bits.append(f"status: {node.get('claim_status', '?')}")
+                elif node_type == "quantity":
+                    bits.append(f"{node.get('level', '?')}; definition: {node.get('definition', '')}")
+                elif node_type == "family" and node.get("relevance"):
+                    bits.append(f"relevance {node['relevance']}/5")
+                if node["status"] != "confirmed":
+                    bits.append(f"[{node['status']}]")
                 summary = node["summary"].replace("\n", " ")
                 if len(summary) > max_summary:
                     summary = summary[: max_summary - 1] + "…"
-                lines.append(f"- {node['id']} | {node['label']}{' ' + meta if meta else ''} | {summary}")
+                lines.append(f"- {node['id']} | {node['label']} | {'; '.join(bits)} | {summary}")
         lines += ["", "## Edges (source -type-> target: label)"]
         for edge in self.edges:
             label = f": {edge['label']}" if edge["label"] else ""
@@ -347,7 +448,8 @@ class Graph:
         if not node:
             return f"No node with id `{node_id}`."
         lines = [f"# {node['label']} ({NODE_TYPES[node['type']]}, id {node['id']}, status {node['status']})"]
-        for key in ("year", "authors", "venue", "doi", "url", "aliases", "tags", "notes"):
+        required, optional = TYPE_FIELDS[node["type"]]
+        for key in (*required, *optional, "aliases", "tags"):
             if node.get(key):
                 value = ", ".join(node[key]) if isinstance(node[key], list) else node[key]
                 lines.append(f"- {key}: {value}")

@@ -12,13 +12,13 @@ import uuid
 from typing import Iterator
 
 from litgraph import literature
-from litgraph.store import EDGE_TYPES, NODE_TYPES, GraphFile
+from litgraph.store import CLAIM_STATUSES, EDGE_TYPES, NODE_TYPES, VALIDATION_LEVELS, GraphFile
 
 MAX_TOOL_ROUNDS = 10
 
 ROLE = """You are a research companion for one researcher. You and they maintain a knowledge graph of a research
-field: nodes are research questions, goals, method families, papers, methods, concepts, open problems and
-applications; edges are typed links between them. The whole graph is given below. Your jobs:
+field, organised in five levels: method families, techniques, papers, claims and quantities (defined below).
+The whole graph is given below. Your jobs:
 
 1. Answer questions about the field using the graph first. When you use a node, name it and give its id in
    square brackets, e.g. LiFlow [paper:nam2025-liflow], so the interface can link it.
@@ -26,24 +26,84 @@ applications; edges are typed links between them. The whole graph is given below
    for papers with metadata; web search for anything else) and say clearly which claims come from the graph,
    which from a search, and which are your own reasoning. Never invent papers, authors, years or DOIs: a paper
    you add must come from a search result or from the researcher.
-3. Grow the graph: when you find something worth keeping (a paper, a concept, a link between two nodes, a
-   refinement of a summary), call propose_graph_changes. Keep proposals small and specific: a few nodes and
-   the edges that connect them to existing nodes, each with a one-sentence summary that a collaborator could
-   check. Reuse existing node ids; never duplicate a node that exists under another name (use find_nodes
-   first when unsure). A proposed change is marked "proposed" in the graph until the researcher confirms it.
-4. Be precise about terminology: use the standard name of a method or quantity, define a quantity the first
-   time you name it, and separate what is measured from what is interpreted. Separate what a paper claims
-   from what it shows. Say what is uncertain.
+3. Grow the graph with propose_graph_changes. A paper comes with its structured fields (year, authors, venue,
+   learns, discards, validated_at), exactly one `contains` edge from its family, and `uses` edges to its
+   techniques, all in the same call. A statement worth keeping becomes a claim with `claim_status`, an `about`
+   edge, and `supports` / `contradicts` edges from the papers that bear on it. An observable a paper checks
+   against becomes a quantity with a one-line operational definition and a validation level, linked by
+   `validates`. Reuse existing ids; never duplicate a node that exists under another name (use find_nodes
+   first when unsure). A proposal that breaks the rules is returned to you with the reasons: fix and resend.
+4. Be precise: standard terminology only; define a quantity the first time you name it; separate what a
+   paper claims from what its evidence shows, and what is measured from what is interpreted. Say what is
+   uncertain.
 
-Always write in English, whatever language the researcher writes in. Keep answers
-compact: short paragraphs, lists for parallel items, no filler.
+Always write in English, whatever language the researcher writes in. Keep answers compact: short paragraphs,
+lists for parallel items, no filler.
 
-Node types: {node_types}
-Edge types: {edge_types}
+Levels:
+- family: a way of attacking the problem, defined by what it learns or keeps, what it discards, and what it
+  still has to compute. Few and stable.
+- technique: a named, reusable method or formalism a paper can apply (you could implement it or cite a
+  standard reference for it).
+- paper: one publication; evidence, not knowledge. Fields: year, authors, venue, doi; learns (what the model
+  or method learns), discards (what it assumes away or does not model), validated_at (levels the paper reports
+  evidence for: {levels}).
+- claim: a falsifiable statement with claim_status in {claim_statuses}. Open questions are claims with
+  status open; the researcher's judgements are claims with status hypothesis.
+- quantity: an observable with an operational definition (object, data, computation) and a level in
+  {levels}.
+
+Edge types: {edge_types}. A `contrasts` or `relates` edge always carries a short label in the papers' own
+terms.
 """
 
 
 def tool_definitions(workspace) -> list[dict]:
+    node_schema = {
+        "type": "object",
+        "properties": {
+            "id": {"type": "string", "description": "Existing id to update, or a new id like paper:lastname2024-keyword"},
+            "type": {"type": "string", "enum": list(NODE_TYPES)},
+            "label": {"type": "string"},
+            "summary": {"type": "string", "description": "One to three sentences a collaborator could verify"},
+            "aliases": {"type": "array", "items": {"type": "string"}},
+            "tags": {"type": "array", "items": {"type": "string"}},
+            # family
+            "relevance": {"type": "integer", "minimum": 1, "maximum": 5, "description": "family: relevance to the research question, 1-5"},
+            # technique
+            "reference": {"type": "string", "description": "technique: standard citation or the id of its defining paper"},
+            # paper
+            "year": {"type": "integer"},
+            "authors": {"type": "string"},
+            "venue": {"type": "string"},
+            "doi": {"type": "string"},
+            "url": {"type": "string"},
+            "learns": {"type": "string", "description": "paper: what the model or method learns"},
+            "discards": {"type": "string", "description": "paper: what it assumes away, removes or does not model"},
+            "validated_at": {"type": "array", "items": {"type": "string", "enum": list(VALIDATION_LEVELS)},
+                             "description": "paper: validation levels the paper reports evidence for"},
+            # claim
+            "claim_status": {"type": "string", "enum": list(CLAIM_STATUSES)},
+            "scope": {"type": "string", "description": "claim: where it holds"},
+            # quantity
+            "definition": {"type": "string", "description": "quantity: one-line operational definition (object, data, computation)"},
+            "level": {"type": "string", "enum": list(VALIDATION_LEVELS), "description": "quantity: validation level"},
+            "symbol": {"type": "string"},
+            "units": {"type": "string"},
+        },
+        "required": ["type", "label", "summary"],
+    }
+    edge_schema = {
+        "type": "object",
+        "properties": {
+            "source": {"type": "string"},
+            "target": {"type": "string"},
+            "type": {"type": "string", "enum": list(EDGE_TYPES)},
+            "label": {"type": "string", "description": "Short phrase for the link, e.g. 'adds many-body memory'"},
+            "note": {"type": "string"},
+        },
+        "required": ["source", "target", "type"],
+    }
     tools = [
         {
             "name": "find_nodes",
@@ -54,7 +114,7 @@ def tool_definitions(workspace) -> list[dict]:
         },
         {
             "name": "read_node",
-            "description": "The full record of one node: metadata, summary and every link, with the linked nodes' ids.",
+            "description": "The full record of one node: fields, summary and every link, with the linked nodes' ids.",
             "input_schema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"],
                              "additionalProperties": False},
             "strict": True,
@@ -64,46 +124,16 @@ def tool_definitions(workspace) -> list[dict]:
             "description": (
                 "Add or update nodes and edges in the knowledge graph. New nodes are marked proposed until the "
                 "researcher confirms them. Edges may name nodes by an existing id or by the label of a node in the "
-                "same call. Give `reason`: one sentence on why these belong in the graph."
+                "same call. The rules (a paper needs one family, one or more techniques and its structured fields; "
+                "a claim needs a status and an about edge; a quantity needs a definition and a level) are checked "
+                "and violations are returned to you. Give `reason`: one sentence on why these belong in the graph."
             ),
             "input_schema": {
                 "type": "object",
                 "properties": {
                     "reason": {"type": "string"},
-                    "nodes": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "id": {"type": "string", "description": "Existing id to update, or a new id like paper:lastname2024-keyword"},
-                                "type": {"type": "string", "enum": list(NODE_TYPES)},
-                                "label": {"type": "string"},
-                                "summary": {"type": "string", "description": "One to three sentences a collaborator could verify"},
-                                "year": {"type": "integer"},
-                                "authors": {"type": "string"},
-                                "venue": {"type": "string"},
-                                "doi": {"type": "string"},
-                                "url": {"type": "string"},
-                                "aliases": {"type": "array", "items": {"type": "string"}},
-                                "tags": {"type": "array", "items": {"type": "string"}},
-                            },
-                            "required": ["type", "label", "summary"],
-                        },
-                    },
-                    "edges": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "source": {"type": "string"},
-                                "target": {"type": "string"},
-                                "type": {"type": "string", "enum": list(EDGE_TYPES)},
-                                "label": {"type": "string", "description": "Short phrase for the link, e.g. 'adds many-body memory'"},
-                                "note": {"type": "string"},
-                            },
-                            "required": ["source", "target", "type"],
-                        },
-                    },
+                    "nodes": {"type": "array", "items": node_schema},
+                    "edges": {"type": "array", "items": edge_schema},
                 },
                 "required": ["reason"],
             },
@@ -143,7 +173,7 @@ class Agent:
 
     def system(self) -> list[dict]:
         instructions = self.workspace.instructions().strip()
-        role = ROLE.format(node_types=", ".join(f"{k} ({v})" for k, v in NODE_TYPES.items()),
+        role = ROLE.format(levels=", ".join(VALIDATION_LEVELS), claim_statuses=", ".join(CLAIM_STATUSES),
                            edge_types=", ".join(f"{k} ({v})" for k, v in EDGE_TYPES.items()))
         stable = role + ("\n\n# The researcher's instructions\n\n" + instructions if instructions else "")
         return [
@@ -196,10 +226,15 @@ class Agent:
         # Check first on a copy, so a change with errors can be fixed by the model before anything is written.
         trial = copy.deepcopy(self.graph_file.graph)
         report = trial.apply(change, status="proposed", source="chat")
-        if report["errors"] and not (report["added_nodes"] or report["added_edges"] or report["updated_nodes"]):
-            return "Nothing applied. Errors:\n- " + "\n- ".join(report["errors"]), None
+        touched = report["added_nodes"] + report["updated_nodes"]
+        hard, soft = trial.check(touched) if touched else ([], [])
+        problems = report["errors"] + hard
+        if problems:
+            return ("Nothing was written. Fix these and call propose_graph_changes again with the complete change "
+                    "(nodes and their edges together):\n- " + "\n- ".join(problems)), None
         status = "confirmed" if self.workspace.auto_apply else "proposed"
         report = self.graph_file.edit(lambda graph: graph.apply(change, status=status, source="chat"))
+        report["warnings"] = soft
         proposal = {
             "id": uuid.uuid4().hex[:10], "reason": str(change.get("reason", "")), "status": status, **report,
             "nodes": [self.graph_file.graph.node(node_id) for node_id in report["added_nodes"] + report["updated_nodes"]],
@@ -207,8 +242,8 @@ class Agent:
         proposals.append(proposal)
         summary = (f"Applied as {status}: {len(report['added_nodes'])} new nodes, {len(report['updated_nodes'])} updated, "
                    f"{len(report['added_edges'])} new edges.")
-        if report["errors"]:
-            summary += " Errors:\n- " + "\n- ".join(report["errors"])
+        if report.get("warnings"):
+            summary += " Warnings:\n- " + "\n- ".join(report["warnings"])
         if report["added_nodes"]:
             summary += "\nNew node ids: " + ", ".join(report["added_nodes"])
         return summary, {"type": "proposal", "proposal": proposal}
@@ -294,9 +329,11 @@ class Agent:
     @staticmethod
     def _extract_instruction(text: str, title: str = "") -> str:
         return (
-            "Read the document and extract a knowledge graph: the research questions and goals it poses, method "
-            "families, papers (with year, authors, venue, DOI when given), key concepts, open problems and "
-            "applications, and the typed links between them that the document itself states. Give every node a "
+            "Read the document and extract a knowledge graph in the five levels: method families (with what they "
+            "keep, discard and still compute), techniques, papers (year, authors, venue, DOI when given; learns, "
+            "discards, validated_at), claims (with claim_status; open questions are claims with status open) and "
+            "quantities (with an operational definition and a level), and the typed edges the document itself "
+            "states: contains, uses, extends, contrasts, supports, contradicts, about, validates. Give every node a "
             "one-to-three sentence summary taken from the document. Reuse ids of nodes already in the graph (listed "
             "in your context) instead of making new ones. Use null or an empty string for fields the document does "
             "not give; never invent metadata.\n\n"

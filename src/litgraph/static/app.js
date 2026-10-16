@@ -6,12 +6,25 @@ const THEME_KEY = "litgraph_theme_v1";
 const MAX_MEMORY = 12;
 const EXPORTED = window.LITGRAPH_EXPORT || null; // a file from `litgraph export`: graph inside, no server
 
-const TYPE_ORDER = ["question", "goal", "category", "paper", "method", "concept", "challenge", "application", "note"];
-const RADIUS = { question: 11, goal: 9, category: 10, paper: 5.5, method: 6, concept: 5, challenge: 6, application: 7, note: 4.5 };
-const CHARGE = { question: -900, goal: -600, category: -1100, paper: -140, method: -160, concept: -120, challenge: -220, application: -260, note: -80 };
-const LINK_DISTANCE = { contains: 70, serves: 150, addresses: 110, uses: 80, extends: 70, contrasts: 110, relates: 100, applies_to: 130, raises: 110, validates: 90 };
-const LINK_STRENGTH = { contains: 0.7, serves: 0.25, addresses: 0.3, uses: 0.35, extends: 0.5, contrasts: 0.25, relates: 0.25, applies_to: 0.2, raises: 0.3, validates: 0.3 };
-const ALWAYS_LABELLED = new Set(["question", "goal", "category", "application", "challenge"]);
+// The five levels (docs/GRAPH_SCHEMA.md), in order.
+const TYPE_ORDER = ["family", "technique", "paper", "claim", "quantity"];
+const LEVEL_NUMBER = { family: 1, technique: 2, paper: 3, claim: 4, quantity: 5 };
+const RADIUS = { family: 11, technique: 6.5, paper: 5, claim: 6, quantity: 6 };
+const CHARGE = { family: -1200, technique: -180, paper: -120, claim: -200, quantity: -200 };
+const LINK_DISTANCE = { contains: 75, uses: 70, extends: 70, contrasts: 110, supports: 90, contradicts: 90, about: 95, validates: 90, relates: 100, bridge: 120 };
+const LINK_STRENGTH = { contains: 0.7, uses: 0.4, extends: 0.5, contrasts: 0.25, supports: 0.35, contradicts: 0.35, about: 0.3, validates: 0.3, relates: 0.25, bridge: 0.12 };
+const ALWAYS_LABELLED = new Set(["family", "quantity"]);
+const VALIDATION_LEVELS = ["structural", "thermodynamic", "kinetic", "transport", "mechanistic"];
+const CLAIM_STATUSES = ["supported", "contradicted", "contested", "hypothesis", "open"];
+// Fields per level, beyond label / summary / aliases: [key, label, kind]. kind: text, textarea, int, select:<name>, multi:<name>
+const TYPE_FIELDS = {
+  family: [["relevance", "Relevance to the question (1-5)", "int"]],
+  technique: [["reference", "Reference (citation or paper id)", "text"]],
+  paper: [["year", "Year", "int"], ["venue", "Venue", "text"], ["authors", "Authors", "text"], ["doi", "DOI", "text"], ["url", "URL", "text"],
+          ["learns", "Learns", "textarea"], ["discards", "Discards", "textarea"], ["validated_at", "Validated at", "multi:levels"], ["priority", "Reading priority", "int"]],
+  claim: [["claim_status", "Status", "select:claim"], ["scope", "Scope (where it holds)", "text"]],
+  quantity: [["level", "Validation level", "select:levels"], ["definition", "Operational definition", "textarea"], ["symbol", "Symbol", "text"], ["units", "Units", "text"]],
+};
 
 const $ = (selector) => document.querySelector(selector);
 const el = {
@@ -99,7 +112,7 @@ function buildSimulation(previous) {
 
 function seedPositions() {
   const sim = state.sim;
-  const hubs = sim.nodes.filter((item) => ["question", "goal", "category"].includes(item.node.type));
+  const hubs = sim.nodes.filter((item) => item.node.type === "family");
   const ring = 160 + hubs.length * 26;
   hubs.forEach((item, index) => { const angle = -Math.PI / 2 + (index / Math.max(hubs.length, 1)) * Math.PI * 2; item.x = Math.cos(angle) * ring; item.y = Math.sin(angle) * ring; });
   const jitter = () => (Math.random() - 0.5) * 60;
@@ -123,13 +136,33 @@ function placeFresh() {
 
 function shownNodes() { if (!state.shown) refreshShown(); return state.shown.nodes; }
 function shownLinks() { if (!state.shown) refreshShown(); return state.shown.links; }
+// What the level filter lets through. When a level is hidden, two visible nodes that were joined through a hidden
+// node get a dashed "bridge" link (families to the techniques their papers use, techniques to the claims about them,
+// ...), so the graph stays connected and still says what is derived from what.
+const BRIDGE_CAP = 40; // pairs per hidden node: a hub paper with 20 neighbours would otherwise add 190 links
 function refreshShown() {
-  const hidden = state.hiddenKinds;
-  state.shown = {
-    nodes: state.sim.nodes.filter((item) => !hidden.has(item.node.type)),
-    links: state.sim.links.filter((link) => !hidden.has(link.source.node.type) && !hidden.has(link.target.node.type)),
-  };
+  const hidden = state.hiddenKinds; const sim = state.sim;
+  const nodes = sim.nodes.filter((item) => !hidden.has(item.node.type));
+  const links = sim.links.filter((link) => !hidden.has(link.source.node.type) && !hidden.has(link.target.node.type));
+  const direct = new Set(links.map((link) => `${link.source.id}|${link.target.id}`).concat(links.map((link) => `${link.target.id}|${link.source.id}`)));
+  const bridged = new Set();
+  for (const item of sim.nodes) {
+    if (!hidden.has(item.node.type)) continue;
+    const around = [...sim.neighbours.get(item.id)].map((id) => sim.byId.get(id)).filter((other) => other && !hidden.has(other.node.type));
+    let made = 0;
+    for (let i = 0; i < around.length && made < BRIDGE_CAP; i += 1) for (let j = i + 1; j < around.length && made < BRIDGE_CAP; j += 1) {
+      const a = around[i]; const b = around[j]; const key = a.id < b.id ? `${a.id}|${b.id}` : `${b.id}|${a.id}`;
+      if (direct.has(`${a.id}|${b.id}`) || bridged.has(key)) continue;
+      bridged.add(key); made += 1;
+      const da = a.degree + 1; const db = b.degree + 1;
+      links.push({ source: a, target: b, edge: { type: "bridge", via: item.node.label, status: "confirmed" }, distance: LINK_DISTANCE.bridge, strength: LINK_STRENGTH.bridge, bias: da / (da + db) });
+    }
+  }
+  const neighbours = new Map(nodes.map((item) => [item.id, new Set()]));
+  for (const { source, target } of links) { neighbours.get(source.id)?.add(target.id); neighbours.get(target.id)?.add(source.id); }
+  state.shown = { nodes, links, neighbours };
 }
+function shownNeighbours(id) { if (!state.shown) refreshShown(); return state.shown.neighbours.get(id) || new Set(); }
 const isShownNode = (item) => item && !state.hiddenKinds.has(item.node.type);
 
 const VELOCITY_DECAY = 0.4; const HOME_PULL = 0.04; const ALPHA_MIN = 0.001; const ALPHA_DECAY = 1 - Math.pow(ALPHA_MIN, 1 / 300);
@@ -204,7 +237,7 @@ function render() {
   const context = el.canvas.getContext("2d"); const { x, y, k } = state.transform; const ratio = state.ratio;
   context.setTransform(1, 0, 0, 1, 0, 0); context.clearRect(0, 0, el.canvas.width, el.canvas.height);
   context.setTransform(ratio * k, 0, 0, ratio * k, ratio * x, ratio * y);
-  const focus = focusId(); const near = focus ? new Set([focus, ...(state.sim.neighbours.get(focus) || [])]) : null;
+  const focus = focusId(); const near = focus ? new Set([focus, ...shownNeighbours(focus)]) : null;
   const now = performance.now();
   if (focus !== state.lastFocus) { state.lastFocus = focus; state.focusSince = now; }
   const fade = !near ? 1 : Math.min(1, (now - state.focusSince) / 180);
@@ -216,7 +249,7 @@ function render() {
   context.lineWidth = 1 / k; context.strokeStyle = state.colours.link; context.globalAlpha = near ? 0.8 - 0.5 * fade : 0.8;
   context.beginPath();
   for (const { source, target, edge } of shownLinks()) {
-    if (edge.status === "proposed") continue;
+    if (edge.status === "proposed" || edge.type === "bridge") continue;
     context.moveTo(source.x, source.y); context.lineTo(target.x, target.y);
   }
   context.stroke();
@@ -225,11 +258,17 @@ function render() {
     if (edge.status !== "proposed") continue;
     context.moveTo(source.x, source.y); context.lineTo(target.x, target.y);
   }
+  context.stroke();
+  context.setLineDash([2 / k, 5 / k]); context.globalAlpha *= 0.7; context.beginPath();
+  for (const { source, target, edge } of shownLinks()) {
+    if (edge.type !== "bridge") continue;
+    context.moveTo(source.x, source.y); context.lineTo(target.x, target.y);
+  }
   context.stroke(); context.setLineDash([]);
   if (near) {
     const centre = state.sim.byId.get(focus);
     context.globalAlpha = fade; context.strokeStyle = state.colours.linkActive; context.lineWidth = 1.5 / k; context.beginPath();
-    for (const id of state.sim.neighbours.get(focus) || []) { const other = state.sim.byId.get(id); if (isShownNode(other) && isShownNode(centre)) { context.moveTo(centre.x, centre.y); context.lineTo(other.x, other.y); } }
+    for (const id of shownNeighbours(focus)) { const other = state.sim.byId.get(id); if (isShownNode(other) && isShownNode(centre)) { context.moveTo(centre.x, centre.y); context.lineTo(other.x, other.y); } }
     context.stroke();
   }
   // nodes, one fill per colour
@@ -270,7 +309,7 @@ function drawLabels(context, nodes, near, focus, onScreen) {
   const candidates = [];
   for (const item of nodes) {
     const isNear = near?.has(item.id);
-    let alpha = ALWAYS_LABELLED.has(item.node.type) ? 1 : item.node.type === "paper" ? Math.max(zoomed, item.degree >= 4 ? 0.9 : 0) : zoomed;
+    let alpha = ALWAYS_LABELLED.has(item.node.type) ? 1 : item.node.type === "technique" ? Math.max(zoomed, item.degree >= 3 ? 0.9 : 0) : zoomed;
     if (near) alpha = isNear ? 1 : Math.min(alpha, 0.12);
     if (alpha >= 0.05 && onScreen(item)) candidates.push({ item, alpha, isNear });
   }
@@ -285,7 +324,8 @@ function drawLabels(context, nodes, near, focus, onScreen) {
   for (const { item, alpha, isNear } of candidates) {
     const big = ALWAYS_LABELLED.has(item.node.type); const weight = big ? 700 : 500; const base = big ? 13 : 11;
     if (item.labelWidth === undefined) {
-      item.labelText = item.node.label.length > 34 ? `${item.node.label.slice(0, 32)}…` : item.node.label;
+      const max = item.node.type === "claim" ? 44 : 34;
+      item.labelText = item.node.label.length > max ? `${item.node.label.slice(0, max - 2)}…` : item.node.label;
       context.font = `${weight} ${base}px Inter, ui-sans-serif, system-ui, sans-serif`; font = ""; item.labelWidth = context.measureText(item.labelText).width;
     }
     const size = base * scale; const width = item.labelWidth * scale; const height = size * 1.2; const gap = 3 / k;
@@ -315,7 +355,7 @@ function fitGraph() { animateTo(viewFor(shownNodes())); }
 function focusOn(nodeId) {
   const item = state.sim.byId.get(nodeId); if (!item) return;
   const { width, height } = visibleArea(); const cardRoom = width < 600 ? 0 : 420;
-  const distances = [...(state.sim.neighbours.get(nodeId) || [])].map((id) => state.sim.byId.get(id)).filter((o) => o && isShownNode(o)).map((o) => Math.hypot(o.x - item.x, o.y - item.y)).sort((a, b) => a - b);
+  const distances = [...shownNeighbours(nodeId)].map((id) => state.sim.byId.get(id)).filter((o) => o && isShownNode(o)).map((o) => Math.hypot(o.x - item.x, o.y - item.y)).sort((a, b) => a - b);
   const reach = distances.length ? distances[Math.floor((distances.length - 1) * 0.8)] + 40 : 140;
   const k = Math.min(2, Math.max(0.8, (Math.min(width - cardRoom, height) / 2 - 30) / reach));
   animateTo({ k, x: (width - cardRoom) / 2 - item.x * k, y: height / 2 - item.y * k });
@@ -377,18 +417,26 @@ el.canvas.addEventListener("wheel", (event) => {
 new ResizeObserver(() => { if (state.graph) resizeCanvas(); }).observe(el.stage);
 
 // ---------- legend, search ----------
+// The level filter: any subset of the five levels. Hidden levels leave dashed bridges between what they connected.
 function buildLegend() {
   el.legend.replaceChildren();
   const counts = new Map();
   for (const node of state.graph.nodes) counts.set(node.type, (counts.get(node.type) || 0) + 1);
+  const title = document.createElement("span"); title.className = "legend-title"; title.textContent = "Levels"; el.legend.appendChild(title);
   for (const type of TYPE_ORDER) {
-    if (!counts.get(type)) continue;
     const button = document.createElement("button"); button.type = "button"; button.setAttribute("aria-pressed", String(!state.hiddenKinds.has(type)));
+    button.title = `${state.hiddenKinds.has(type) ? "Show" : "Hide"} level ${LEVEL_NUMBER[type]}: ${state.nodeTypes[type] || type}`;
     const dot = document.createElement("i"); dot.style.background = `var(--c-${type})`;
-    button.append(dot, `${state.nodeTypes[type] || type} `); const count = document.createElement("small"); count.textContent = counts.get(type); button.appendChild(count);
-    button.addEventListener("click", () => { if (state.hiddenKinds.has(type)) state.hiddenKinds.delete(type); else state.hiddenKinds.add(type); state.shown = null; buildLegend(); startPhysics(0.4); });
+    button.append(dot, `${LEVEL_NUMBER[type]} ${state.nodeTypes[type] || type} `); const count = document.createElement("small"); count.textContent = counts.get(type) || 0; button.appendChild(count);
+    button.addEventListener("click", () => {
+      if (state.hiddenKinds.has(type)) state.hiddenKinds.delete(type); else if (state.hiddenKinds.size < TYPE_ORDER.length - 1) state.hiddenKinds.add(type);
+      state.shown = null; buildLegend(); startPhysics(0.5); if (!state.viewTouched) setTimeout(fitGraph, 400);
+    });
     el.legend.appendChild(button);
   }
+  const only = document.createElement("button"); only.type = "button"; only.className = "legend-reset"; only.textContent = "All";
+  only.title = "Show every level"; only.addEventListener("click", () => { state.hiddenKinds.clear(); state.shown = null; buildLegend(); startPhysics(0.4); });
+  el.legend.appendChild(only);
 }
 function showSearchResults(query) {
   const needle = query.trim().toLowerCase();
@@ -403,7 +451,7 @@ function showSearchResults(query) {
   for (const { node } of matches) {
     const button = document.createElement("button"); button.className = "search-result"; button.type = "button";
     const dot = document.createElement("i"); dot.className = "dot"; dot.style.background = `var(--c-${node.type})`;
-    const label = document.createElement("span"); label.textContent = node.label; const kind = document.createElement("small"); kind.textContent = `${state.nodeTypes[node.type] || node.type}${node.year ? ` · ${node.year}` : ""}`;
+    const label = document.createElement("span"); label.textContent = node.label; const kind = document.createElement("small"); kind.textContent = `${state.nodeTypes[node.type] || node.type}${node.year ? ` · ${node.year}` : ""}${node.claim_status ? ` · ${node.claim_status}` : ""}`;
     button.append(dot, label, kind); button.addEventListener("click", () => { el.search.value = ""; el.searchResults.hidden = true; selectNode(node.id, { fit: true }); });
     el.searchResults.appendChild(button);
   }
@@ -436,18 +484,46 @@ function chip(node, extra = "") {
   button.addEventListener("click", () => selectNode(node.id, { fit: true }));
   return button;
 }
+function fieldRow(label, value) {
+  const row = document.createElement("div"); row.className = "field-row";
+  const name = document.createElement("b"); name.textContent = label; row.appendChild(name);
+  if (Array.isArray(value)) { const wrap = document.createElement("span"); for (const item of value) { const tag = document.createElement("i"); tag.className = "tag"; tag.textContent = item; wrap.appendChild(tag); } row.appendChild(wrap); }
+  else if (value instanceof Node) row.appendChild(value);
+  else { const text = document.createElement("span"); text.textContent = value; row.appendChild(text); }
+  return row;
+}
 function showNodeCard(node) {
-  el.kind.textContent = state.nodeTypes[node.type] || node.type; el.kind.style.color = `var(--c-${node.type})`;
-  el.status.hidden = node.status === "confirmed"; el.status.textContent = node.status === "proposed" ? "proposed by the agent" : node.status;
+  el.kind.textContent = `Level ${LEVEL_NUMBER[node.type] || ""} · ${state.nodeTypes[node.type] || node.type}`; el.kind.style.color = `var(--c-${node.type})`;
+  const badges = [];
+  if (node.status !== "confirmed") badges.push(node.status === "proposed" ? "proposed by the agent" : node.status);
+  if (node.type === "claim" && node.claim_status) badges.push(node.claim_status);
+  if (node.type === "quantity" && node.level) badges.push(node.level);
+  el.status.hidden = !badges.length; el.status.textContent = badges.join(" · ");
   el.title.textContent = node.label;
   const meta = [];
   if (node.authors) meta.push(node.authors); if (node.venue || node.year) meta.push([node.venue, node.year].filter(Boolean).join(" "));
   el.meta.replaceChildren(meta.join(" · "));
   const link = node.doi ? `https://doi.org/${node.doi.replace(/^https?:\/\/doi\.org\//, "")}` : node.url;
   if (link) { el.meta.append(meta.length ? " · " : ""); const a = document.createElement("a"); a.href = link; a.target = "_blank"; a.rel = "noopener"; a.textContent = node.doi ? "DOI ↗" : "Open ↗"; el.meta.appendChild(a); }
-  el.meta.hidden = !meta.length && !link;
+  if (node.type === "paper" && node.priority) { el.meta.append(` · reading priority ${node.priority}`); }
+  if (node.type === "family" && node.relevance) { el.meta.append(`Relevance to the question: ${node.relevance}/5`); }
+  el.meta.hidden = !el.meta.textContent;
   el.summary.textContent = node.summary || ""; el.summary.hidden = !node.summary;
   el.links.replaceChildren();
+  // the structured fields of the level
+  if (node.type === "paper") {
+    if (node.learns) el.links.appendChild(fieldRow("Learns", node.learns));
+    if (node.discards) el.links.appendChild(fieldRow("Discards", node.discards));
+    el.links.appendChild(fieldRow("Validated at", node.validated_at?.length ? node.validated_at : ["not recorded"]));
+  } else if (node.type === "claim") {
+    if (node.scope) el.links.appendChild(fieldRow("Scope", node.scope));
+  } else if (node.type === "quantity") {
+    if (node.definition) el.links.appendChild(fieldRow("Definition", node.definition));
+    if (node.symbol || node.units) el.links.appendChild(fieldRow("Symbol", [node.symbol, node.units].filter(Boolean).join(", ")));
+  } else if (node.type === "technique" && node.reference) {
+    const ref = state.nodesById.get(node.reference);
+    el.links.appendChild(fieldRow("Reference", ref ? chip(ref) : node.reference));
+  }
   const groups = new Map();
   for (const edge of state.edgesByNode.get(node.id) || []) {
     const outgoing = edge.source === node.id; const other = state.nodesById.get(outgoing ? edge.target : edge.source); if (!other) continue;
@@ -466,8 +542,8 @@ function showNodeCard(node) {
   el.card.hidden = false;
 }
 $("#close-node-card").addEventListener("click", clearSelection);
-el.explain.addEventListener("click", () => { const node = state.nodesById.get(state.selectedId); if (node) askAbout(node, `Explain ${node.label} using the graph: what it is, what it learns or assumes, how it connects to the neighbouring nodes, and what is uncertain. Then say whether the graph's summary of it should be improved.`); });
-el.expand.addEventListener("click", () => { const node = state.nodesById.get(state.selectedId); if (node) askAbout(node, `Search the literature for work closely related to ${node.label} (papers that extend it, apply it to ion transport in solids, or compare against it). Pick at most four that matter for the research question in this graph, say why each matters, and add them to the graph with edges to the right existing nodes.`); });
+el.explain.addEventListener("click", () => { const node = state.nodesById.get(state.selectedId); if (node) askAbout(node, `Explain ${shortLabel(node)} [${node.id}] using the graph: what it is, what it learns or assumes and discards, which claims and quantities it bears on, and what is uncertain. Then say whether the graph's record of it should be improved.`); });
+el.expand.addEventListener("click", () => { const node = state.nodesById.get(state.selectedId); if (node) askAbout(node, `Search the literature for work closely related to ${shortLabel(node)} [${node.id}] (papers that extend it, apply it to ion transport in solids, or compare against it). Pick at most four that matter for the research question, say why each matters, and add them to the graph: each with its family, the techniques it uses, learns / discards / validated_at, and any claim it supports or contradicts.`); });
 el.confirm.addEventListener("click", async () => { const id = state.selectedId; if (id) { await api("/api/graph/status", { ids: [id], status: "confirmed" }); } });
 el.remove.addEventListener("click", async () => {
   const node = state.nodesById.get(state.selectedId); if (!node) return;
@@ -478,20 +554,50 @@ el.remove.addEventListener("click", async () => {
 // ---------- editing ----------
 function fillTypeSelects() {
   const typeSelect = $("#edit-type"); typeSelect.replaceChildren();
-  for (const type of TYPE_ORDER) { if (!state.nodeTypes[type]) continue; const option = document.createElement("option"); option.value = type; option.textContent = state.nodeTypes[type]; typeSelect.appendChild(option); }
+  for (const type of TYPE_ORDER) { if (!state.nodeTypes[type]) continue; const option = document.createElement("option"); option.value = type; option.textContent = `${LEVEL_NUMBER[type]} · ${state.nodeTypes[type]}`; typeSelect.appendChild(option); }
   el.linkType.replaceChildren();
   for (const [type, name] of Object.entries(state.edgeTypes)) { const option = document.createElement("option"); option.value = type; option.textContent = name; el.linkType.appendChild(option); }
   el.nodeOptions.replaceChildren();
   for (const node of state.graph.nodes) { const option = document.createElement("option"); option.value = node.label; el.nodeOptions.appendChild(option); }
 }
+// The fields of the chosen level, built when the dialog opens and when the type changes.
+function renderTypeFields(node) {
+  const type = $("#edit-type").value; const box = $("#edit-type-fields"); box.replaceChildren();
+  for (const [key, label, kind] of TYPE_FIELDS[type] || []) {
+    const wrap = document.createElement("label"); if (kind === "textarea" || kind.startsWith("multi")) wrap.className = "wide";
+    wrap.append(label);
+    const value = node && node.type === type ? node[key] : undefined;
+    let input;
+    if (kind === "textarea") { input = document.createElement("textarea"); input.rows = 2; input.value = value || ""; }
+    else if (kind.startsWith("select")) {
+      input = document.createElement("select"); const options = kind.endsWith("claim") ? CLAIM_STATUSES : VALIDATION_LEVELS;
+      for (const option of ["", ...options]) { const o = document.createElement("option"); o.value = option; o.textContent = option || "—"; input.appendChild(o); }
+      input.value = value || "";
+    } else if (kind.startsWith("multi")) {
+      input = document.createElement("div"); input.className = "checks";
+      for (const option of VALIDATION_LEVELS) { const l = document.createElement("label"); const c = document.createElement("input"); c.type = "checkbox"; c.value = option; c.checked = (value || []).includes(option); l.append(c, option); input.appendChild(l); }
+    } else { input = document.createElement("input"); if (kind === "int") { input.type = "number"; input.min = 0; } input.value = value ?? ""; }
+    input.dataset.field = key; input.dataset.kind = kind; wrap.appendChild(input); box.appendChild(wrap);
+  }
+}
+function readTypeFields() {
+  const out = {};
+  for (const input of $("#edit-type-fields").querySelectorAll("[data-field]")) {
+    const key = input.dataset.field; const kind = input.dataset.kind;
+    if (kind.startsWith("multi")) out[key] = [...input.querySelectorAll("input:checked")].map((c) => c.value);
+    else if (kind === "int") out[key] = input.value ? Number(input.value) : undefined;
+    else out[key] = input.value.trim();
+  }
+  return out;
+}
 function openEditor(node) {
   state.editingId = node ? node.id : null; state.pendingLinks = [];
   el.editTitle.textContent = node ? "Edit node" : "Add a node"; el.editError.hidden = true;
-  $("#edit-label").value = node?.label || ""; $("#edit-type").value = node?.type || "concept"; $("#edit-summary").value = node?.summary || "";
-  $("#edit-year").value = node?.year || ""; $("#edit-venue").value = node?.venue || ""; $("#edit-authors").value = node?.authors || "";
-  $("#edit-doi").value = node?.doi || ""; $("#edit-url").value = node?.url || ""; $("#edit-aliases").value = (node?.aliases || []).join(", ");
-  renderEditLinks(); el.dialog.showModal();
+  $("#edit-label").value = node?.label || ""; $("#edit-type").value = node?.type || "paper"; $("#edit-summary").value = node?.summary || "";
+  $("#edit-aliases").value = (node?.aliases || []).join(", ");
+  renderTypeFields(node); renderEditLinks(); el.dialog.showModal();
 }
+$("#edit-type").addEventListener("change", () => renderTypeFields(state.editingId ? state.nodesById.get(state.editingId) : null));
 function renderEditLinks() {
   el.linkList.replaceChildren();
   const existing = state.editingId ? state.edgesByNode.get(state.editingId) || [] : [];
@@ -521,8 +627,7 @@ el.editForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const aliases = $("#edit-aliases").value.split(",").map((a) => a.trim()).filter(Boolean);
   const payload = { id: state.editingId || undefined, label: $("#edit-label").value.trim(), type: $("#edit-type").value, summary: $("#edit-summary").value.trim(),
-    year: $("#edit-year").value ? Number($("#edit-year").value) : undefined, venue: $("#edit-venue").value.trim(), authors: $("#edit-authors").value.trim(),
-    doi: $("#edit-doi").value.trim(), url: $("#edit-url").value.trim(), aliases, status: "confirmed" };
+    aliases, status: "confirmed", ...readTypeFields() };
   const reply = await api("/api/graph/nodes", payload, "POST", { silent: true });
   if (!reply?.ok) { el.editError.textContent = reply?.message || "Could not save."; el.editError.hidden = false; return; }
   for (const pending of state.pendingLinks) await api("/api/graph/edges", { source: reply.node.id, target: pending.target, type: pending.type, label: pending.label }, "POST", { silent: true });
@@ -552,16 +657,22 @@ function setChatOpen(open) {
 el.openChat.addEventListener("click", () => setChatOpen(true)); el.closeChat.addEventListener("click", () => setChatOpen(false));
 function readMemory() { try { const parsed = JSON.parse(sessionStorage.getItem(MEMORY_KEY) || "[]"); return Array.isArray(parsed) ? parsed.slice(-MAX_MEMORY) : []; } catch { return []; } }
 function writeMemory(items) { try { sessionStorage.setItem(MEMORY_KEY, JSON.stringify(items.slice(-MAX_MEMORY))); } catch { /* ignore */ } }
+// A short name for a node in prompts and chips: its shortest alias, else the label cut at 60 characters.
+function shortLabel(node) {
+  const alias = (node.aliases || []).filter((a) => a.length >= 3).sort((x, y) => x.length - y.length)[0];
+  if (alias && alias.length < node.label.length) return alias;
+  return node.label.length > 60 ? `${node.label.slice(0, 58)}…` : node.label;
+}
 function updateContext() {
   const node = state.nodesById.get(state.selectedId);
-  el.contextBar.hidden = !node; el.question.placeholder = node ? `Ask about ${node.label}…` : "Ask about the field, or ask to search and add…";
-  if (node) el.contextChip.querySelector("b").textContent = node.label;
+  el.contextBar.hidden = !node; el.question.placeholder = node ? `Ask about ${shortLabel(node)}…` : "Ask about the field, or ask to search and add…";
+  if (node) el.contextChip.querySelector("b").textContent = shortLabel(node);
 }
 el.contextChip.addEventListener("click", clearSelection);
 function updateSuggestions(node) {
   const list = node
-    ? [`What does ${node.label} assume, and what does it leave out?`, `Which other nodes in the graph does ${node.label} compete with or complement?`, `Find recent papers that build on ${node.label} and add the relevant ones.`]
-    : ["Which method families can preserve true transition rates, and which only reproduce structure?", "Where are the gaps in this graph? Suggest what to add.", "Find recent work on generative dynamics for ionic conductors and add the best ones."];
+    ? [`What does ${shortLabel(node)} learn, assume and discard, and what is it validated against?`, `Which claims in the graph bear on ${shortLabel(node)}, and how strong is the evidence?`, `Find recent papers that build on ${shortLabel(node)} and add the relevant ones, with their techniques and validation levels.`]
+    : ["Which families are validated at the kinetic or mechanistic level, and which stop at structure or MSD?", "Which open claims could be settled by papers already published? Search and add them.", "Where are the gaps in this graph? Suggest what to add."];
   el.suggestions.replaceChildren();
   for (const text of list) { const button = document.createElement("button"); button.type = "button"; button.textContent = text; button.addEventListener("click", () => submitQuestion(text)); el.suggestions.appendChild(button); }
 }

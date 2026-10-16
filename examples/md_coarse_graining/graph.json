@@ -1,165 +1,245 @@
 {
-  "schema": "1.0",
-  "title": "MD coarse-graining and acceleration for ion transport",
-  "description": "From accelerated MD and ML coarse-graining to generative dynamics models that replace MD, read against Li-ion transport in solid-state electrolytes. Seeded from the literature review in notes/.",
+  "schema": "2.0",
+  "title": "MD coarse-graining and acceleration for ion transport in solid-state electrolytes",
+  "description": "Can we learn an efficient representation or dynamics model from atomistic simulations (MLIP-MD, AIMD) that predicts Li-ion transport (diffusivity, conductivity, hop rates, migration pathways, correlated migration) accurately at larger spatial and temporal scales? Seven method families from classical accelerated MD to generative dynamics, read against that question. Seeded from the review in notes/.",
   "nodes": [
     {
-      "id": "question:main",
-      "type": "question",
-      "label": "Learn an efficient representation or dynamics model from atomistic simulation?",
-      "summary": "Can we learn an efficient representation or dynamics model from atomistic simulations (MLIP-MD, AIMD) that enables accurate predictions at larger spatial and temporal scales? The review frames this as three separable goals: spatial coarse-graining, temporal acceleration and dynamical coarse-graining.",
-      "status": "seed",
-      "source": "review",
-      "aliases": [
-        "central question",
-        "research question"
-      ]
-    },
-    {
-      "id": "goal:spatial-cg",
-      "type": "goal",
-      "label": "Spatial coarse-graining",
-      "summary": "Reduce the number of simulated degrees of freedom, e.g. several atoms become one particle, or only the occupancy state of mobile ions is kept.",
-      "status": "seed",
-      "source": "review"
-    },
-    {
-      "id": "goal:temporal-acceleration",
-      "type": "goal",
-      "label": "Temporal acceleration",
-      "summary": "Reduce the number of computational steps needed per unit of physical time, e.g. predict the state 1 ps ahead directly instead of integrating 1 fs steps.",
-      "status": "seed",
-      "source": "review"
-    },
-    {
-      "id": "goal:dynamical-cg",
-      "type": "goal",
-      "label": "Dynamical coarse-graining",
-      "summary": "Stop tracking the full atomic motion and learn higher-level dynamical rules instead: ion hops, state transitions, transition rates.",
-      "status": "seed",
-      "source": "review"
-    },
-    {
-      "id": "category:a",
-      "type": "category",
+      "id": "family:a",
+      "type": "family",
       "label": "A. Fast MD / learned integrator",
-      "summary": "Keep the atomistic description but take larger time steps while preserving the structure of the true dynamics (symplecticity, time reversibility). Needs MD, with fewer steps. Review's relevance to solid-state electrolytes: 4/5 (subjective).",
+      "summary": "Keeps: the full atomistic description and the physical structure of the dynamics (symplecticity, time reversibility). Discards: the intermediate integration steps, by learning a map over a long time interval. Still computes: MD, with far fewer steps. Open issue: large steps when fast lattice vibrations couple strongly to slow ion migration.",
       "status": "seed",
       "source": "review",
+      "relevance": 4,
       "aliases": [
-        "Fast MD / learned integrator",
-        "category A"
+        "family A",
+        "learned integrator"
       ]
     },
     {
-      "id": "category:b",
-      "type": "category",
-      "label": "B. Spatial coarse-graining / ML CG force fields",
-      "summary": "Reduce degrees of freedom and learn an effective potential and dynamics in the coarse-grained space (CGnet, CG auto-encoders, force matching). MD still runs, in CG space. Relevance 3/5.",
+      "id": "family:b",
+      "type": "family",
+      "label": "B. Spatial coarse-graining",
+      "summary": "Keeps: a reduced set of degrees of freedom (CG particles, or only the mobile ions) and an effective potential, optionally with memory and noise. Discards: the eliminated atoms' explicit motion. Still computes: MD in the coarse-grained space. The eliminated degrees of freedom still act on the kept ones (Mori-Zwanzig), which a potential alone cannot represent.",
       "status": "seed",
       "source": "review",
+      "relevance": 3,
       "aliases": [
-        "Spatial coarse-graining / ML CG force fields",
-        "category B"
+        "family B",
+        "coarse-grained force fields",
+        "CG MD"
       ]
     },
     {
-      "id": "category:c",
-      "type": "category",
+      "id": "family:c",
+      "type": "family",
       "label": "C. Enhanced sampling",
-      "summary": "Accelerate rare events and reach hard-to-sample states by biasing the dynamics (metadynamics, OPES, umbrella sampling, weighted ensemble). Bias must be accounted for to recover kinetics. Relevance 5/5.",
+      "summary": "Keeps: all atoms. Discards: the natural visiting order of states, by adding a bias along collective variables so rare states are reached. Still computes: biased MD, from which rates must be recovered under the method's conditions. Covers metadynamics, OPES, umbrella sampling, weighted ensemble and learned collective variables.",
       "status": "seed",
       "source": "review",
+      "relevance": 5,
       "aliases": [
-        "Enhanced sampling",
-        "category C"
+        "family C"
       ]
     },
     {
-      "id": "category:d",
-      "type": "category",
-      "label": "D. Accelerated dynamics / rare-event methods",
-      "summary": "Skip the long waiting times in metastable basins (hyperdynamics, parallel replica, temperature-accelerated dynamics, on-the-fly kMC) while keeping the correct state-to-state dynamics. Relevance 5/5.",
+      "id": "family:d",
+      "type": "family",
+      "label": "D. Accelerated dynamics",
+      "summary": "Keeps: the correct state-to-state dynamics of activated processes. Discards: the time spent waiting in metastable basins, by hyperdynamics, parallel replica or temperature-accelerated dynamics. Still computes: MD with an acceleration strategy. Decades older than the ML approaches and the natural baseline for them.",
       "status": "seed",
       "source": "review",
+      "relevance": 5,
       "aliases": [
-        "Accelerated dynamics / rare-event methods",
-        "category D"
+        "family D",
+        "rare-event methods"
       ]
     },
     {
-      "id": "category:e",
-      "type": "category",
-      "label": "E. Kinetic coarse-graining (MSM / kMC)",
-      "summary": "Convert continuous trajectories into discrete states and transitions between them: Markov state models, kinetic Monte Carlo, transition path theory. MD not necessarily needed after the model is built. Relevance 5/5.",
+      "id": "family:e",
+      "type": "family",
+      "label": "E. Kinetic coarse-graining",
+      "summary": "Keeps: discrete states and the transition probabilities or rates between them (Markov state models, kinetic Monte Carlo, transition path theory). Discards: continuous atomic motion within a state. Still computes: MD only to build the model; afterwards none. Compresses the state space, not the atoms.",
       "status": "seed",
       "source": "review",
+      "relevance": 5,
       "aliases": [
-        "Kinetic coarse-graining (MSM / kMC)",
-        "category E"
+        "family E",
+        "MSM / kMC",
+        "kinetic models"
       ]
     },
     {
-      "id": "category:f",
-      "type": "category",
+      "id": "family:f",
+      "type": "family",
       "label": "F. Generative dynamics / neural simulators",
-      "summary": "Directly learn the distribution of future states or of state transitions (flow matching, diffusion, latent-space propagators). At inference no MD integration is needed. Relevance 5/5.",
+      "summary": "Keeps: a learned distribution over future states or displacements, or a latent dynamics with a decoder. Discards: step-by-step integration and, in latent variants, explicit atoms between steps. Still computes: MD only for training data; none at inference. Separates into direct displacement models (LiFlow), latent propagators (LSS) and descriptor-space predictors.",
       "status": "seed",
       "source": "review",
+      "relevance": 5,
       "aliases": [
-        "Generative dynamics / neural simulators",
-        "category F"
+        "family F",
+        "neural simulators"
       ]
     },
     {
-      "id": "category:g",
-      "type": "category",
+      "id": "family:g",
+      "type": "family",
       "label": "G. Adaptive / multiscale simulation",
-      "summary": "Allocate resolution and compute by region, time or event importance: adaptive resolution, concurrent multiscale, active learning. Relevance 4/5.",
+      "summary": "Keeps: full resolution where and when it matters. Discards: resolution elsewhere, switching representations by region, time or event. Still computes: atomistic MD in part of the system or part of the time. For solid electrolytes an event-driven variant (simplified dynamics in a site, atomistic near a bottleneck) is a proposal, not an existing method.",
       "status": "seed",
       "source": "review",
+      "relevance": 4,
       "aliases": [
-        "Adaptive / multiscale simulation",
-        "category G"
+        "family G"
       ]
     },
     {
-      "id": "concept:symplectic-time-reversible",
-      "type": "concept",
-      "label": "Symplecticity and time reversibility",
-      "summary": "Geometric properties of Hamiltonian flow maps. A learned long-time-step map that preserves them avoids the energy drift and equipartition failures of generic ML trajectory predictors. Preserving them does not by itself guarantee correct diffusivities or rare-event rates (review's caution).",
-      "status": "seed",
-      "source": "review"
-    },
-    {
-      "id": "concept:mori-zwanzig-memory",
-      "type": "concept",
-      "label": "Mori–Zwanzig memory, dissipation and noise",
-      "summary": "In the Mori–Zwanzig framework, dynamics of coarse-grained variables contain, beyond the effective potential, dissipation, random forces and memory from the eliminated degrees of freedom. A CG potential that reproduces the equilibrium distribution does not fix the time scales of the CG dynamics.",
+      "id": "technique:action-learning",
+      "type": "technique",
+      "label": "Action learning (learned long-time-step integrator)",
+      "summary": "Learn the mechanical action of a long time interval so the induced map (R_t, V_t) -> (R_{t+dt}, V_{t+dt}) is symplectic and time-reversible by construction.",
       "status": "seed",
       "source": "review",
       "aliases": [
-        "memory kernel",
-        "generalized Langevin equation"
-      ]
+        "learning the action"
+      ],
+      "reference": "paper:bigi2026-learning-the-action"
     },
     {
-      "id": "concept:collective-variables",
-      "type": "concept",
-      "label": "Collective variables / reaction coordinates",
-      "summary": "Low-dimensional functions s(t) of the configuration R(t) that capture slow motion. They can be learned (e.g. SPIB) and then used to bias sampling. More sampled transitions do not equal correct transition rates.",
+      "id": "technique:force-matching",
+      "type": "technique",
+      "label": "Force matching",
+      "summary": "Fit a coarse-grained potential by minimising the difference between its forces and the atomistic forces projected onto the CG variables; yields the CG free-energy surface.",
       "status": "seed",
       "source": "review",
       "aliases": [
-        "CV",
-        "reaction coordinate"
+        "multiscale coarse-graining"
       ]
     },
     {
-      "id": "concept:msm",
-      "type": "concept",
+      "id": "technique:cg-autoencoder",
+      "type": "technique",
+      "label": "Coarse-graining auto-encoder",
+      "summary": "A variational auto-encoder whose encoder is the CG mapping, trained jointly with a CG force field and a decoder that reconstructs atomistic configurations.",
+      "status": "seed",
+      "source": "review",
+      "aliases": [
+        "CG-VAE",
+        "learned CG mapping"
+      ],
+      "reference": "paper:wang2019-cg-autoencoders"
+    },
+    {
+      "id": "technique:gnn-cg-potential",
+      "type": "technique",
+      "label": "Graph-neural-network CG potential",
+      "summary": "A graph neural network over CG beads as the transferable CG interaction model, trained by force matching.",
+      "status": "seed",
+      "source": "review",
+      "aliases": [],
+      "reference": "paper:husic2020-cg-gnn"
+    },
+    {
+      "id": "technique:generalized-langevin-memory",
+      "type": "technique",
+      "label": "Generalized Langevin / Mori-Zwanzig memory",
+      "summary": "CG dynamics with a memory kernel, dissipation and noise derived from the eliminated degrees of freedom (Mori-Zwanzig projection); the many-body form couples the kernels across particles.",
+      "status": "seed",
+      "source": "review",
+      "aliases": [
+        "GLE",
+        "Mori-Zwanzig formalism",
+        "memory kernel"
+      ]
+    },
+    {
+      "id": "technique:denoising-force-matching",
+      "type": "technique",
+      "label": "Denoising force matching",
+      "summary": "Force matching combined with a denoising objective on perturbed configurations, lowering the data needed for a CG model.",
+      "status": "seed",
+      "source": "review",
+      "aliases": [],
+      "reference": "paper:durumeric2026-force-matching-denoising"
+    },
+    {
+      "id": "technique:metadynamics",
+      "type": "technique",
+      "label": "Metadynamics",
+      "summary": "Enhanced sampling that deposits a history-dependent bias along collective variables to push the system out of visited states.",
+      "status": "seed",
+      "source": "review",
+      "aliases": []
+    },
+    {
+      "id": "technique:infrequent-metadynamics",
+      "type": "technique",
+      "label": "Infrequent metadynamics (kinetics from biased runs)",
+      "summary": "Deposit bias rarely enough that transition states stay unbiased; rescale escape times by the accumulated bias to recover unbiased rates.",
+      "status": "seed",
+      "source": "review",
+      "aliases": [],
+      "reference": "paper:tiwary2013-metadynamics-kinetics"
+    },
+    {
+      "id": "technique:spib",
+      "type": "technique",
+      "label": "State predictive information bottleneck (SPIB)",
+      "summary": "Learn a low-dimensional reaction coordinate as the information bottleneck that predicts the future metastable state after a lag time; works from short or under-sampled trajectories.",
+      "status": "seed",
+      "source": "review",
+      "aliases": [
+        "SPIB"
+      ],
+      "reference": "paper:wang2021-spib"
+    },
+    {
+      "id": "technique:weighted-ensemble",
+      "type": "technique",
+      "label": "Weighted ensemble",
+      "summary": "Run many unbiased trajectories, split and merge them with weight bookkeeping so rare regions keep walkers; rates follow from the weight flux.",
+      "status": "seed",
+      "source": "review",
+      "aliases": []
+    },
+    {
+      "id": "technique:hyperdynamics",
+      "type": "technique",
+      "label": "Hyperdynamics",
+      "summary": "Add a bias potential that raises metastable basins but vanishes at dividing surfaces; the clock is advanced by the boost factor, preserving the state-to-state sequence.",
+      "status": "seed",
+      "source": "review",
+      "aliases": [],
+      "reference": "paper:voter1997-hyperdynamics"
+    },
+    {
+      "id": "technique:parallel-replica-dynamics",
+      "type": "technique",
+      "label": "Parallel replica dynamics",
+      "summary": "Run independent replicas of the same state; the first escape in any replica is the next transition, with time summed over replicas.",
+      "status": "seed",
+      "source": "review",
+      "aliases": [
+        "ParRep"
+      ]
+    },
+    {
+      "id": "technique:temperature-accelerated-dynamics",
+      "type": "technique",
+      "label": "Temperature-accelerated dynamics",
+      "summary": "Run at raised temperature, record escapes, and filter them with harmonic transition-state theory to reproduce the low-temperature sequence of events.",
+      "status": "seed",
+      "source": "review",
+      "aliases": [
+        "TAD"
+      ]
+    },
+    {
+      "id": "technique:markov-state-model",
+      "type": "technique",
       "label": "Markov state model",
-      "summary": "A kinetic model with discrete states and a transition probability matrix P(s_{t+τ} | s_t) estimated from trajectories; the lag time τ sets the resolution.",
+      "summary": "Discretise configurations into states and estimate the transition matrix P(s_{t+tau} | s_t) at lag tau; implied time scales and populations follow from its spectrum.",
       "status": "seed",
       "source": "review",
       "aliases": [
@@ -167,10 +247,22 @@
       ]
     },
     {
-      "id": "concept:kmc",
-      "type": "concept",
+      "id": "technique:vamp",
+      "type": "technique",
+      "label": "Variational approach for Markov processes (VAMP)",
+      "summary": "A variational score for the quality of a state decomposition or feature map, used to train deep networks that build Markov state models end to end.",
+      "status": "seed",
+      "source": "review",
+      "aliases": [
+        "VAMPnets"
+      ],
+      "reference": "paper:mardt2018-vampnets"
+    },
+    {
+      "id": "technique:kinetic-monte-carlo",
+      "type": "technique",
       "label": "Kinetic Monte Carlo",
-      "summary": "Stochastic simulation of state-to-state transitions from a catalog of events and rates; off-lattice and self-learning variants discover events on the fly.",
+      "summary": "Stochastic simulation of transitions from a catalog of events and rates; the clock advances by exponential waiting times.",
       "status": "seed",
       "source": "review",
       "aliases": [
@@ -178,110 +270,263 @@
       ]
     },
     {
-      "id": "concept:flow-matching",
-      "type": "concept",
+      "id": "technique:k-art",
+      "type": "technique",
+      "label": "Kinetic activation-relaxation technique (k-ART)",
+      "summary": "Off-lattice, self-learning kinetic Monte Carlo: saddle points are searched from the local environment with the activation-relaxation technique and catalogued by topology, so no predefined lattice event list is needed.",
+      "status": "seed",
+      "source": "review",
+      "aliases": [
+        "k-ART"
+      ],
+      "reference": "paper:elmellouhi2008-kart"
+    },
+    {
+      "id": "technique:landmark-analysis",
+      "type": "technique",
+      "label": "Unsupervised landmark analysis",
+      "summary": "Identify sites (landmarks) and ion hops from an MD trajectory without a predefined lattice, by clustering the mobile ions' positions and detecting changes of landmark.",
+      "status": "seed",
+      "source": "review",
+      "aliases": [
+        "jump detection"
+      ],
+      "reference": "paper:kahle2019-landmark-analysis"
+    },
+    {
+      "id": "technique:flow-matching",
+      "type": "technique",
       "label": "Flow matching",
-      "summary": "A generative modelling method that learns a velocity field transporting a simple distribution to the target distribution; used in LiFlow to generate conditional atomic displacements.",
+      "summary": "Train a velocity field that transports a simple reference distribution to the target; here the target is the conditional distribution of atomic displacements.",
       "status": "seed",
-      "source": "review"
+      "source": "review",
+      "aliases": []
     },
     {
-      "id": "concept:latent-dynamics",
-      "type": "concept",
-      "label": "Latent-space dynamics",
-      "summary": "Encode R_t to a low-dimensional z_t, propagate z in the latent space, decode back to R_{t+τ}. The compression concentrates on slow variables.",
-      "status": "seed",
-      "source": "review"
-    },
-    {
-      "id": "concept:force-matching",
-      "type": "concept",
-      "label": "Force matching",
-      "summary": "Learn a CG potential by matching its forces to the projected atomistic forces; the standard route to a CG free-energy surface.",
-      "status": "seed",
-      "source": "review"
-    },
-    {
-      "id": "concept:learned-cg-mapping",
-      "type": "concept",
-      "label": "Learned coarse-grained mapping",
-      "summary": "The grouping of atoms into CG particles need not be fixed by hand: an encoder can learn the mapping jointly with the CG potential and a decoder for reconstruction.",
-      "status": "seed",
-      "source": "review"
-    },
-    {
-      "id": "concept:equilibrium-vs-dynamics",
-      "type": "concept",
-      "label": "Equilibrium sampling ≠ dynamics",
-      "summary": "P(R) describes the equilibrium distribution; P(R_{t+τ} | R_t) describes dynamical transitions. A model that samples equilibrium structures perfectly need not predict diffusion coefficients.",
+      "id": "technique:latent-space-propagator",
+      "type": "technique",
+      "label": "Latent-space propagator (encoder, propagator, decoder)",
+      "summary": "Encode configurations to slow latent variables, learn a stochastic propagator in the latent space over a lag time, and decode back to atomistic configurations.",
       "status": "seed",
       "source": "review",
       "aliases": [
-        "P(R) vs P(R_{t+τ}|R_t)"
-      ]
+        "latent dynamics",
+        "LSS"
+      ],
+      "reference": "paper:sidky2020-latent-space-simulators"
     },
     {
-      "id": "concept:metastable-waiting",
-      "type": "concept",
-      "label": "Waiting time in metastable basins",
-      "summary": "In activated diffusion the system spends far longer waiting in a basin than crossing a barrier; most compute is spent waiting, which accelerated-dynamics methods skip.",
+      "id": "technique:descriptor-trajectory-prediction",
+      "type": "technique",
+      "label": "Descriptor-space trajectory prediction",
+      "summary": "Compress the simulation state into atomic-descriptor statistics and predict their time series directly, with an uncertainty estimate.",
+      "status": "seed",
+      "source": "review",
+      "aliases": [],
+      "reference": "paper:swinburne2023-descriptor-trajectories"
+    },
+    {
+      "id": "technique:boltzmann-generator",
+      "type": "technique",
+      "label": "Boltzmann generator",
+      "summary": "A normalizing flow trained to sample the Boltzmann distribution P(R) directly, reweighted to exactness; produces equilibrium configurations without a trajectory.",
       "status": "seed",
       "source": "review",
       "aliases": [
-        "rare events",
-        "activated diffusion"
-      ]
+        "normalizing flow sampler"
+      ],
+      "reference": "paper:noe2019-boltzmann-generators"
     },
     {
-      "id": "concept:transition-rates",
-      "type": "concept",
-      "label": "Transition rates and kinetics recovery",
-      "summary": "Hop rates, residence times and transition probabilities; the quantities a dynamics model must preserve for transport predictions, and the ones that biased or coarse-grained methods most easily get wrong.",
+      "id": "technique:adaptive-resolution",
+      "type": "technique",
+      "label": "Adaptive resolution scheme (AdResS)",
+      "summary": "Couple atomistic and coarse-grained regions so molecules change resolution on crossing a transition zone, with forces interpolated for momentum conservation.",
       "status": "seed",
-      "source": "review"
+      "source": "review",
+      "aliases": [
+        "AdResS"
+      ],
+      "reference": "paper:praprotnik2005-adress"
+    },
+    {
+      "id": "quantity:rdf",
+      "type": "quantity",
+      "label": "Radial distribution function",
+      "summary": "",
+      "status": "seed",
+      "source": "review",
+      "level": "structural",
+      "definition": "For a pair of species in a trajectory: the histogram of interatomic distances, normalised by the ideal-gas expectation at the same density.",
+      "symbol": "g(r)"
+    },
+    {
+      "id": "quantity:site-occupancy",
+      "type": "quantity",
+      "label": "Site occupancy",
+      "summary": "",
+      "status": "seed",
+      "source": "review",
+      "level": "structural",
+      "definition": "For a set of crystallographic or detected sites: the fraction of frames in which each site holds a mobile ion, averaged over the trajectory."
+    },
+    {
+      "id": "quantity:free-energy-difference",
+      "type": "quantity",
+      "label": "Free-energy difference",
+      "summary": "",
+      "status": "seed",
+      "source": "review",
+      "level": "thermodynamic",
+      "definition": "Between two states or along a collective variable: -kT times the log ratio of their equilibrium populations, estimated from (biased or unbiased) sampling.",
+      "symbol": "dF"
+    },
+    {
+      "id": "quantity:residence-time",
+      "type": "quantity",
+      "label": "Residence time",
+      "summary": "",
+      "status": "seed",
+      "source": "review",
+      "level": "kinetic",
+      "definition": "For a mobile ion and a site: the mean time between arriving at the site and the next hop away, from hop events detected in the trajectory."
+    },
+    {
+      "id": "quantity:hop-rate",
+      "type": "quantity",
+      "label": "Hop rate",
+      "summary": "",
+      "status": "seed",
+      "source": "review",
+      "level": "kinetic",
+      "definition": "Number of detected hops of a mobile ion between sites per ion per unit time, from a trajectory or from a rate model; the escape rate in rate-theory terms.",
+      "symbol": "k"
+    },
+    {
+      "id": "quantity:transition-probability",
+      "type": "quantity",
+      "label": "Transition probability",
+      "summary": "",
+      "status": "seed",
+      "source": "review",
+      "level": "kinetic",
+      "definition": "For discrete states and a lag time tau: the probability of being in state j at t+tau given state i at t, estimated by counting transitions in trajectories.",
+      "symbol": "P(s_{t+tau} | s_t)"
+    },
+    {
+      "id": "quantity:msd",
+      "type": "quantity",
+      "label": "Mean squared displacement",
+      "summary": "",
+      "status": "seed",
+      "source": "review",
+      "level": "transport",
+      "definition": "For the mobile species: the average over ions and time origins of |r(t0+t) - r(t0)|^2, as a function of lag t.",
+      "symbol": "MSD(t)"
+    },
+    {
+      "id": "quantity:diffusivity",
+      "type": "quantity",
+      "label": "Diffusivity",
+      "summary": "",
+      "status": "seed",
+      "source": "review",
+      "level": "transport",
+      "definition": "The tracer diffusion coefficient: lim MSD(t) / (2 d t) over the diffusive regime of the MSD, with d the dimension.",
+      "symbol": "D"
+    },
+    {
+      "id": "quantity:correlation-factor",
+      "type": "quantity",
+      "label": "Correlation factor",
+      "summary": "",
+      "status": "seed",
+      "source": "review",
+      "level": "transport",
+      "definition": "The ratio of the tracer diffusivity to the diffusivity of an uncorrelated random walk with the same hop rate and jump length; below 1 when successive hops are anticorrelated.",
+      "symbol": "f"
+    },
+    {
+      "id": "quantity:ionic-conductivity",
+      "type": "quantity",
+      "label": "Ionic conductivity",
+      "summary": "",
+      "status": "seed",
+      "source": "review",
+      "level": "transport",
+      "definition": "From the Nernst-Einstein relation with the charge diffusivity (collective displacement of all mobile ions), or from the Green-Kubo current autocorrelation.",
+      "symbol": "sigma"
+    },
+    {
+      "id": "quantity:migration-pathway",
+      "type": "quantity",
+      "label": "Migration pathway",
+      "summary": "",
+      "status": "seed",
+      "source": "review",
+      "level": "mechanistic",
+      "definition": "The sequence of sites and the saddle region a mobile ion passes through in a hop, identified from trajectories or from saddle-point searches; cooperative when several ions move in one event."
     },
     {
       "id": "paper:bigi2026-learning-the-action",
       "type": "paper",
-      "label": "Learning the Action for Long-Time-Step Simulations of MD",
-      "summary": "Learns a long-time-step dynamical map (R_t, V_t) → (R_{t+Δt}, V_{t+Δt}) through a learned mechanical action, which enforces symplecticity and time reversibility; avoids the energy conservation and equipartition problems of generic ML trajectory predictors; trains from short trajectories and transfers across temperatures and compositions. Not coarse-graining: no degrees of freedom are removed. Open question: does it preserve long-time diffusion statistics?",
+      "label": "Learning the Action for Long-Time-Step Simulations of Molecular Dynamics",
+      "summary": "Avoids the energy-conservation and equipartition failures of generic ML trajectory predictors; trains from short trajectories and transfers across temperatures and compositions. Validation levels here follow the review's description (conservation and equipartition); the paper should be checked for any diffusion test.",
       "status": "seed",
       "source": "review",
       "year": 2026,
       "authors": "Bigi et al.",
       "venue": "Physical Review Letters",
+      "learns": "A long-time-step map of positions and velocities, through a learned action that enforces symplecticity and time reversibility.",
+      "discards": "Nothing in the degrees of freedom; the intermediate integration steps are skipped.",
+      "validated_at": [
+        "structural",
+        "thermodynamic"
+      ],
       "aliases": [
-        "Learning the Action",
         "Bigi 2026"
       ],
-      "doi": "10.1103/shj2-hyw8"
+      "doi": "10.1103/shj2-hyw8",
+      "priority": 3
     },
     {
       "id": "paper:wang2019-cg-autoencoders",
       "type": "paper",
       "label": "Coarse-graining auto-encoders for molecular dynamics",
-      "summary": "A VAE learns the CG mapping R → z, an effective force field in z, and a decoder z → R, in one framework. Key idea: the CG mapping itself can be learned. Caveat: a CG potential that reproduces the equilibrium distribution does not give the CG dynamics the correct time scales.",
+      "summary": "The mapping need not be fixed by hand. The CG potential reproduces equilibrium properties; the review flags that this does not give the CG dynamics the correct time scales.",
       "status": "seed",
       "source": "review",
       "year": 2019,
-      "authors": "Wang & Gómez-Bombarelli",
+      "authors": "Wang & Gomez-Bombarelli",
       "venue": "npj Computational Materials",
-      "aliases": [
-        "CG auto-encoders",
-        "CG-VAE"
+      "learns": "The CG mapping (encoder), the effective CG force field, and a decoder that reconstructs atomistic configurations, jointly.",
+      "discards": "The eliminated atoms' explicit motion; the dynamics of the CG variables are not matched to the atomistic time scales.",
+      "validated_at": [
+        "structural",
+        "thermodynamic"
       ],
-      "doi": "10.1038/s41524-019-0261-5"
+      "aliases": [
+        "CG auto-encoders"
+      ],
+      "doi": "10.1038/s41524-019-0261-5",
+      "priority": 4
     },
     {
       "id": "paper:wang2019-cgnet",
       "type": "paper",
-      "label": "Machine learning of coarse-grained molecular dynamics force fields (CGnet)",
-      "summary": "CGnet learns a CG free-energy function by force matching with a neural network.",
+      "label": "Machine learning of coarse-grained molecular dynamics force fields",
+      "summary": "The reference neural CG force field; free-energy surfaces of small proteins are reproduced.",
       "status": "seed",
       "source": "review",
       "year": 2019,
       "authors": "Wang et al.",
       "venue": "ACS Central Science",
+      "learns": "A CG free-energy function (CGnet) by force matching with a neural network and physics-based priors.",
+      "discards": "The eliminated atoms; any memory or friction from them.",
+      "validated_at": [
+        "thermodynamic",
+        "structural"
+      ],
       "aliases": [
         "CGnet"
       ],
@@ -291,12 +536,18 @@
       "id": "paper:husic2020-cg-gnn",
       "type": "paper",
       "label": "Coarse graining molecular dynamics with graph neural networks",
-      "summary": "Graph neural networks learn transferable coarse-grained interactions. (Cited in the review as Olsson et al. 2020; PMC7671749.)",
+      "summary": "Cited in the original review as Olsson et al. 2020 (PMC7671749).",
       "status": "seed",
       "source": "review",
       "year": 2020,
-      "authors": "Husic, Charron, ..., Olsson, Noé, Clementi",
+      "authors": "Husic et al.",
       "venue": "Journal of Chemical Physics",
+      "learns": "A transferable CG interaction model as a graph neural network over beads.",
+      "discards": "The eliminated atoms; memory and friction.",
+      "validated_at": [
+        "thermodynamic",
+        "structural"
+      ],
       "aliases": [
         "Olsson et al. 2020",
         "CG GNN"
@@ -306,29 +557,41 @@
     {
       "id": "paper:lyu2023-cg-memory",
       "type": "paper",
-      "label": "Construction of coarse-grained MD with many-body non-Markovian memory",
-      "summary": "Introduces many-body memory into CG dynamics; shows that memory is needed to predict collective transport and diffusion correctly. Motivates the view that a CG potential alone is insufficient for diffusion kinetics in, e.g., Li-only CG models of solid electrolytes.",
+      "label": "Construction of coarse-grained molecular dynamics with many-body non-Markovian memory",
+      "summary": "Shows that many-body memory is needed to predict collective transport and diffusion correctly; the reason the review doubts that a Li-only CG potential can predict diffusion kinetics in solid electrolytes.",
       "status": "seed",
       "source": "review",
       "year": 2023,
       "authors": "Lyu & Lei",
       "venue": "Physical Review Letters",
+      "learns": "A CG model with a many-body, non-Markovian memory kernel in addition to the effective potential.",
+      "discards": "The eliminated degrees of freedom, but their effect is kept as memory and noise rather than dropped.",
+      "validated_at": [
+        "transport",
+        "kinetic"
+      ],
       "aliases": [
         "Lyu & Lei 2023",
         "CG MD with memory"
       ],
-      "doi": "10.1103/PhysRevLett.131.177301"
+      "doi": "10.1103/PhysRevLett.131.177301",
+      "priority": 5
     },
     {
       "id": "paper:durumeric2026-force-matching-denoising",
       "type": "paper",
-      "label": "Force matching with denoising for data-efficient CG models",
-      "summary": "Combines force matching with denoising to reduce substantially the data needed to train CG models.",
+      "label": "Force matching with denoising for data-efficient coarse-grained models",
+      "summary": "Lowers the data requirement of CG models substantially.",
       "status": "seed",
       "source": "review",
       "year": 2026,
       "authors": "Durumeric et al.",
       "venue": "Nature Communications",
+      "learns": "A CG potential from force matching plus a denoising objective, with far fewer atomistic samples.",
+      "discards": "The eliminated atoms; memory and friction.",
+      "validated_at": [
+        "thermodynamic"
+      ],
       "aliases": [],
       "doi": "10.1038/s41467-026-70818-0"
     },
@@ -336,12 +599,17 @@
       "id": "paper:tiwary2013-metadynamics-kinetics",
       "type": "paper",
       "label": "From metadynamics to dynamics",
-      "summary": "Recovers transition kinetics (unbiased rates) from metadynamics runs, under conditions on the bias deposition.",
+      "summary": "The standard route from biased sampling back to kinetics, with its applicability conditions.",
       "status": "seed",
       "source": "review",
       "year": 2013,
       "authors": "Tiwary & Parrinello",
       "venue": "Physical Review Letters",
+      "learns": "Unbiased transition rates from metadynamics runs with infrequent bias deposition.",
+      "discards": "The natural visiting order; recovers time only under the condition that transition states stay unbiased.",
+      "validated_at": [
+        "kinetic"
+      ],
       "aliases": [
         "infrequent metadynamics"
       ],
@@ -350,69 +618,93 @@
     {
       "id": "paper:wang2021-spib",
       "type": "paper",
-      "label": "State predictive information bottleneck (SPIB)",
-      "summary": "Learns reaction coordinates from dynamical (time-lagged) information, including from under-sampled trajectories.",
+      "label": "State predictive information bottleneck",
+      "summary": "Learns the slow coordinate that predicts the future metastable state; feeds enhanced sampling.",
       "status": "seed",
       "source": "review",
       "year": 2021,
       "authors": "Wang & Tiwary",
       "venue": "Journal of Chemical Physics",
-      "aliases": [
-        "SPIB"
+      "learns": "A reaction coordinate from time-lagged (dynamical) information, including from under-sampled trajectories.",
+      "discards": "Fast degrees of freedom orthogonal to the learned coordinate.",
+      "validated_at": [
+        "kinetic"
       ],
+      "aliases": [],
       "doi": "10.1063/5.0038198"
     },
     {
       "id": "paper:mehdi2022-spib-metadynamics",
       "type": "paper",
-      "label": "Enhanced sampling with SPIB-learned collective variables",
-      "summary": "Uses SPIB-learned CVs to guide metadynamics, closing the loop between CV learning and enhanced sampling.",
+      "label": "Enhanced sampling with machine-learning-based collective variables (SPIB-guided metadynamics)",
+      "summary": "Closes the loop between CV learning and enhanced sampling.",
       "status": "seed",
       "source": "review",
       "year": 2022,
       "authors": "Mehdi et al.",
-      "venue": "JCTC",
+      "venue": "Journal of Chemical Theory and Computation",
+      "learns": "Collective variables (SPIB) that are then used to bias metadynamics, iterated.",
+      "discards": "The natural visiting order of states.",
+      "validated_at": [
+        "thermodynamic",
+        "kinetic"
+      ],
       "aliases": [],
       "doi": "10.1021/acs.jctc.2c00058"
     },
     {
       "id": "paper:zuckerman2017-weighted-ensemble",
       "type": "paper",
-      "label": "Weighted ensemble simulation (review)",
-      "summary": "Reviews weighted-ensemble methods: parallel trajectories with weight redistribution to sample rare events efficiently without biasing the dynamics.",
+      "label": "Weighted ensemble simulation: review of methodology, applications, and software",
+      "summary": "Rates follow from unbiased weight flux, so no bias correction is needed.",
       "status": "seed",
       "source": "review",
       "year": 2017,
       "authors": "Zuckerman & Chong",
       "venue": "Annual Review of Biophysics",
+      "learns": "Nothing (a review); describes weight-splitting schemes that sample rare events without biasing the dynamics.",
+      "discards": "Nothing in the dynamics; compute is redistributed among trajectories.",
+      "validated_at": [
+        "kinetic"
+      ],
       "aliases": [
-        "weighted ensemble"
+        "weighted ensemble review"
       ],
       "doi": "10.1146/annurev-biophys-070816-033834"
     },
     {
       "id": "paper:voter1997-hyperdynamics",
       "type": "paper",
-      "label": "Hyperdynamics",
-      "summary": "Raises the energy of metastable basins with a bias that vanishes at dividing surfaces, accelerating rare transitions while preserving the state-to-state dynamics.",
+      "label": "Hyperdynamics: accelerated molecular dynamics of infrequent events",
+      "summary": "Correct state-to-state dynamics with a rigorous time rescaling, under transition-state-theory assumptions.",
       "status": "seed",
       "source": "review",
       "year": 1997,
       "authors": "Voter",
       "venue": "Physical Review Letters",
+      "learns": "Nothing is learned; a bias potential that vanishes on dividing surfaces accelerates escapes with a known boost factor.",
+      "discards": "The waiting time inside basins.",
+      "validated_at": [
+        "kinetic"
+      ],
       "aliases": [],
       "doi": "10.1103/PhysRevLett.78.3908"
     },
     {
       "id": "paper:voter2002-accelerated-md-review",
       "type": "paper",
-      "label": "Extending the time scale in atomistic simulation of materials (review)",
-      "summary": "Systematic review of hyperdynamics, parallel replica dynamics, temperature-accelerated dynamics and on-the-fly kMC. The review recommends it as the theoretical reference and baseline for ML accelerators.",
+      "label": "Extending the time scale in atomistic simulation of materials",
+      "summary": "The theoretical reference and baseline for ML accelerators; the review keeps it as the standard against which learned methods are judged.",
       "status": "seed",
       "source": "review",
       "year": 2002,
       "authors": "Voter, Montalenti & Germann",
       "venue": "Annual Review of Materials Research",
+      "learns": "Nothing (a review) of hyperdynamics, parallel replica dynamics, temperature-accelerated dynamics and on-the-fly kMC.",
+      "discards": "The waiting time in basins, by each method's own device.",
+      "validated_at": [
+        "kinetic"
+      ],
       "aliases": [
         "Voter 2002"
       ],
@@ -421,362 +713,666 @@
     {
       "id": "paper:mardt2018-vampnets",
       "type": "paper",
-      "label": "VAMPnets: deep learning of molecular kinetics",
-      "summary": "Builds Markov state models end-to-end with deep networks by maximising the variational approach for Markov processes (VAMP) score.",
+      "label": "VAMPnets for deep learning of molecular kinetics",
+      "summary": "Deep Markov state models without hand-built features.",
       "status": "seed",
       "source": "review",
       "year": 2018,
-      "authors": "Mardt, Pasquali, Wu & Noé",
+      "authors": "Mardt, Pasquali, Wu & Noe",
       "venue": "Nature Communications",
-      "aliases": [
-        "VAMPnets"
+      "learns": "A state decomposition and transition matrix end to end, by maximising the VAMP score.",
+      "discards": "Continuous motion within states; a lag time is chosen.",
+      "validated_at": [
+        "kinetic"
       ],
+      "aliases": [],
       "doi": "10.1038/s41467-017-02388-1"
     },
     {
       "id": "paper:kahle2019-landmark-analysis",
       "type": "paper",
-      "label": "Unsupervised landmark analysis for jump detection in MD",
-      "summary": "Automatically identifies sites and ion hops from MD trajectories of ionic conductors. Solves part of the trajectory-analysis problem; it is not yet a predictive kinetic model for new environments. Already read by the researcher.",
+      "label": "Unsupervised landmark analysis for jump detection in molecular dynamics simulations",
+      "summary": "Already read by the researcher. Solves trajectory analysis, not prediction. Published version in Physical Review Materials: add the DOI from the journal page.",
       "status": "seed",
       "source": "review",
       "year": 2019,
       "authors": "Kahle, Musaelian, Marzari & Kozinsky",
-      "venue": "arXiv:1902.02107 / Phys. Rev. Materials",
+      "venue": "arXiv:1902.02107 (Physical Review Materials, 2019)",
+      "learns": "Sites and hop events from ionic MD trajectories, without a predefined lattice.",
+      "discards": "Continuous motion within a site; nothing predictive about new environments.",
+      "validated_at": [
+        "kinetic",
+        "mechanistic"
+      ],
       "aliases": [
-        "landmark analysis",
-        "jump detection"
+        "landmark analysis"
       ],
       "url": "https://arxiv.org/abs/1902.02107"
     },
     {
       "id": "paper:elmellouhi2008-kart",
       "type": "paper",
-      "label": "Kinetic activation-relaxation technique (k-ART)",
-      "summary": "Off-lattice, self-learning kinetic Monte Carlo that discovers events and barriers from the local environment, so no complete lattice event catalog is required; handles local distortions and off-lattice motion.",
+      "label": "Kinetic activation-relaxation technique: an off-lattice self-learning kinetic Monte Carlo algorithm",
+      "summary": "Handles local distortion and off-lattice motion without a complete predefined event list.",
       "status": "seed",
       "source": "review",
       "year": 2008,
       "authors": "El-Mellouhi, Mousseau & Lewis",
       "venue": "Physical Review B",
-      "aliases": [
-        "k-ART"
+      "learns": "An event catalog and barriers discovered from local environments during the simulation.",
+      "discards": "Continuous motion within basins; requires the local topology classification to hold.",
+      "validated_at": [
+        "kinetic",
+        "mechanistic"
       ],
+      "aliases": [],
       "doi": "10.1103/PhysRevB.78.153202"
     },
     {
       "id": "paper:sidky2020-latent-space-simulators",
       "type": "paper",
       "label": "Molecular latent space simulators",
-      "summary": "Encoder → latent propagator → decoder: learns slow variables, propagates dynamics in latent space, and regenerates atomistic configurations; generates long trajectories of protein models at far lower cost than MD.",
+      "summary": "Generates long trajectories of protein models at far lower cost than MD, reproducing the slow kinetics.",
       "status": "seed",
       "source": "review",
       "year": 2020,
       "authors": "Sidky, Chen & Ferguson",
       "venue": "Chemical Science",
+      "learns": "Slow latent variables, a stochastic propagator in that space, and a decoder to atomistic configurations.",
+      "discards": "Fast motion orthogonal to the slow variables; explicit atoms between decoded frames.",
+      "validated_at": [
+        "kinetic",
+        "structural"
+      ],
       "aliases": [
-        "LSS",
         "latent space simulators"
       ],
-      "doi": "10.1039/D0SC03635H"
+      "doi": "10.1039/D0SC03635H",
+      "priority": 2
     },
     {
       "id": "paper:swinburne2023-descriptor-trajectories",
       "type": "paper",
-      "label": "Compressing and predicting materials simulation trajectories with atomic descriptors",
-      "summary": "Builds a compressed state representation from atomic descriptors, performs time-series prediction in that space, and estimates prediction uncertainty.",
+      "label": "Compression and prediction of materials simulation trajectories with atomic descriptors",
+      "summary": "A third route beside direct displacement models and latent propagators.",
       "status": "seed",
       "source": "review",
       "year": 2023,
       "authors": "Swinburne",
       "venue": "Physical Review Letters",
+      "learns": "A compressed state built from atomic descriptors and its time series, with uncertainty.",
+      "discards": "Atomic positions; only descriptor statistics are propagated.",
+      "validated_at": [
+        "structural"
+      ],
       "aliases": [],
       "doi": "10.1103/PhysRevLett.131.236101"
     },
     {
       "id": "paper:nam2025-liflow",
       "type": "paper",
-      "label": "LiFlow: flow matching for accelerated simulation of atomic transport",
-      "summary": "Learns P(ΔR | R_t, T): the distribution of atomic displacements over a time interval given the current structure and temperature, with flow matching; a Propagator generates displacements and a Corrector fixes unphysical structures. Trained on 25 ps MD trajectories of 4,186 solid-electrolyte candidates at several temperatures. Li MSD on unseen compositions: Spearman ≈ 0.7–0.8. Reported speed-up up to ≈ 600,000× relative to AIMD (not relative to GPU MLIP-MD). Still needs MD training data. Open question: does it reproduce migration mechanisms, transition rates and correlated motion, not only MSD?",
+      "label": "Flow matching for accelerated simulation of atomic transport in crystalline materials (LiFlow)",
+      "summary": "Trained on 25 ps MD trajectories of 4,186 solid-electrolyte candidates at several temperatures. Li MSD on unseen compositions: Spearman about 0.7 to 0.8. Reported speed-up up to about 600,000x relative to AIMD. The paper closest to the researcher's problem.",
       "status": "seed",
       "source": "review",
       "year": 2025,
-      "authors": "Nam, Peng & Gómez-Bombarelli",
+      "authors": "Nam, Peng & Gomez-Bombarelli",
       "venue": "Nature Machine Intelligence",
+      "learns": "P(dR | R_t, T): the distribution of atomic displacements over a time interval given the current structure and temperature; a Propagator generates them and a Corrector repairs unphysical structures.",
+      "discards": "Step-by-step integration; the model is conditioned on structure and temperature only and still needs MD trajectories to train.",
+      "validated_at": [
+        "transport",
+        "structural"
+      ],
       "aliases": [
         "LiFlow",
         "Nam 2025"
       ],
       "doi": "10.1038/s42256-025-01125-4",
-      "url": "https://github.com/learningmatter-mit/liflow"
-    },
-    {
-      "id": "paper:praprotnik2005-adress",
-      "type": "paper",
-      "label": "Adaptive resolution scheme (AdResS)",
-      "summary": "Molecules switch between atomistic and coarse-grained representations depending on the region they are in. The review proposes an event-driven analogue for solid electrolytes (simplified dynamics while an ion sits in a site, atomistic MLIP near a bottleneck); AdResS itself has not done this.",
-      "status": "seed",
-      "source": "review",
-      "year": 2005,
-      "authors": "Praprotnik, Delle Site & Kremer",
-      "venue": "Journal of Chemical Physics",
-      "aliases": [
-        "AdResS"
-      ],
-      "doi": "10.1063/1.2132286"
+      "url": "https://github.com/learningmatter-mit/liflow",
+      "priority": 1
     },
     {
       "id": "paper:noe2019-boltzmann-generators",
       "type": "paper",
-      "label": "Boltzmann generators",
-      "summary": "Samples the equilibrium distribution directly with a generative model, giving equilibrium structures and thermodynamics without long MD trajectories. It models P(R), not P(R_{t+τ} | R_t): equilibrium generation, not dynamics.",
+      "label": "Boltzmann generators: sampling equilibrium states of many-body systems with deep learning",
+      "summary": "Equilibrium structures and free energies without MD; a different objective from any dynamics model.",
       "status": "seed",
       "source": "review",
       "year": 2019,
-      "authors": "Noé, Olsson, Köhler & Wu",
+      "authors": "Noe, Olsson, Kohler & Wu",
       "venue": "Science",
+      "learns": "A normalizing flow from a simple prior to the Boltzmann distribution, reweighted to exactness.",
+      "discards": "Time altogether: no trajectory and no transition dynamics.",
+      "validated_at": [
+        "thermodynamic",
+        "structural"
+      ],
       "aliases": [
         "Boltzmann generators"
       ],
       "doi": "10.1126/science.aaw1147"
     },
     {
-      "id": "application:sse-li-transport",
-      "type": "application",
-      "label": "Li-ion transport in solid-state electrolytes",
-      "summary": "The researcher's target: predicting diffusivity, ionic conductivity, hop rates and correlated migration in solid electrolytes from MLIP-MD. The review's relevance stars (A 4, B 3, C 5, D 5, E 5, F 5, G 4) are subjective judgements against this target.",
+      "id": "paper:praprotnik2005-adress",
+      "type": "paper",
+      "label": "Adaptive resolution molecular-dynamics simulation: changing the degrees of freedom on the fly",
+      "summary": "The review proposes an event-driven analogue for solid electrolytes; AdResS itself has not done this.",
       "status": "seed",
       "source": "review",
-      "aliases": [
-        "solid-state battery",
-        "SSE"
-      ]
+      "year": 2005,
+      "authors": "Praprotnik, Delle Site & Kremer",
+      "venue": "Journal of Chemical Physics",
+      "learns": "Nothing is learned; molecules switch between atomistic and CG representations by region.",
+      "discards": "Atomistic detail in the coarse region, with momentum-conserving coupling across the transition zone.",
+      "validated_at": [
+        "structural",
+        "thermodynamic"
+      ],
+      "aliases": [],
+      "doi": "10.1063/1.2132286"
     },
     {
-      "id": "concept:validation-hierarchy",
-      "type": "concept",
-      "label": "Validation hierarchy for coarse-grained dynamics",
-      "summary": "Check a learned dynamics model at five levels: structural (RDF, site occupancy, local coordination); thermodynamic (free-energy differences, equilibrium populations); kinetic (residence time, transition probability, hop rate); transport (MSD, diffusivity, correlation factor); mechanistic (migration pathways, cooperative hopping, environment-dependent jumps). A model can pass the first four and still produce wrong pathways.",
+      "id": "claim:cg-potential-does-not-fix-time-scales",
+      "type": "claim",
+      "label": "A CG potential that reproduces the equilibrium distribution does not determine the time scales of the CG dynamics",
+      "summary": "The eliminated degrees of freedom act on the kept ones through dissipation, noise and memory (Mori-Zwanzig); matching P(R) leaves these unconstrained, so diffusion and collective transport can be wrong even when structure and free energies are right.",
       "status": "seed",
       "source": "review",
-      "aliases": [
-        "validation levels"
-      ]
+      "claim_status": "supported",
+      "scope": "Coarse-grained models of any kind; acute for Li-only models of solid electrolytes."
     },
     {
-      "id": "challenge:what-to-eliminate",
-      "type": "challenge",
-      "label": "What should coarse-graining eliminate?",
-      "summary": "Candidate representations for solid electrolytes lose different information: remove high-frequency lattice vibrations but keep coordinates; remove framework atoms and keep mobile ions plus an effective environment; remove in-site vibrations and keep occupancy and migration events; keep no explicit atoms or sites and learn continuous latent dynamics.",
+      "id": "claim:host-lattice-effects-persist",
+      "type": "claim",
+      "label": "Coarse-graining away the host lattice leaves its effect on the mobile ions, which must be represented as friction, noise or memory",
+      "summary": "The reviewer's inference from the Mori-Zwanzig argument applied to solid electrolytes: a Li-only CG particle model with a simple effective potential is unlikely to predict diffusion kinetics.",
       "status": "seed",
-      "source": "review"
+      "source": "review",
+      "claim_status": "hypothesis",
+      "scope": "Solid-state electrolytes."
     },
     {
-      "id": "challenge:learn-from-short-md",
-      "type": "challenge",
-      "label": "Can effective dynamics be learned from short MD alone?",
-      "summary": "If an important migration pathway never appears in the training trajectories the model cannot find it. Likely needs enhanced sampling, active exploration or physical constraints, not just bigger networks.",
+      "id": "claim:learned-cg-mapping",
+      "type": "claim",
+      "label": "The coarse-grained mapping can be learned jointly with the CG potential rather than fixed by hand",
+      "summary": "An encoder trained with the CG force field and a decoder yields a mapping and a potential together.",
       "status": "seed",
-      "source": "review"
+      "source": "review",
+      "claim_status": "supported"
     },
     {
-      "id": "challenge:validate-cg-dynamics",
-      "type": "challenge",
-      "label": "How to test whether coarse-grained dynamics are correct?",
-      "summary": "Judged by the review as more important than the model architecture; validation should be layered by research goal (see the validation hierarchy). Right structure and even right MSD can coexist with wrong migration pathways; conversely a model with poor instantaneous positions but correct transition kinetics may suit long-time transport.",
+      "id": "claim:more-transitions-not-rates",
+      "type": "claim",
+      "label": "Sampling more transition events does not by itself give correct transition rates",
+      "summary": "Biased sampling changes the dynamics; rates are recovered only under the method's conditions (e.g. infrequent bias deposition with unbiased transition states), or by schemes that never bias the dynamics (weighted ensemble).",
       "status": "seed",
-      "source": "review"
+      "source": "review",
+      "claim_status": "supported",
+      "scope": "Enhanced sampling."
     },
     {
-      "id": "challenge:preserve-true-kinetics",
-      "type": "challenge",
-      "label": "Faster sampling vs preserving true dynamics",
-      "summary": "The review's central distinction: a method that only samples structures faster is much easier than one that preserves true dynamics; predicting diffusivity, conductivity, hop rates or correlated migration demands the latter.",
+      "id": "claim:waiting-time-dominates",
+      "type": "claim",
+      "label": "In activated diffusion the time spent waiting in basins far exceeds the transition time, so skipping the waiting gives large speed-ups while keeping the state-to-state dynamics",
+      "summary": "The premise of hyperdynamics, parallel replica and temperature-accelerated dynamics, with rigorous time rescaling under transition-state-theory assumptions.",
       "status": "seed",
-      "source": "review"
+      "source": "review",
+      "claim_status": "supported",
+      "scope": "Rare-event dynamics in solids."
     },
     {
-      "id": "note:goal-to-method-map",
-      "type": "note",
-      "label": "Which families for which goal (review §5)",
-      "summary": "Faster accurate diffusion coefficients: A, D, E, F (difficulty: preserving true time scales and rates). Learning migration mechanisms and pathways automatically: C, E, F (difficulty: finding unobserved states and transitions). Larger-scale transport with disorder and collective migration: B, E, F, G (difficulty: keeping local-environment dependence and inter-ion dynamical correlation).",
+      "id": "claim:symplecticity-not-sufficient-for-diffusion",
+      "type": "claim",
+      "label": "A symplectic, time-reversible long-time-step map need not reproduce long-time diffusion statistics",
+      "summary": "The reviewer's caution on learned integrators: geometric structure prevents energy drift and equipartition failure but does not by itself constrain diffusivity or rare-event rates.",
       "status": "seed",
-      "source": "review"
+      "source": "review",
+      "claim_status": "hypothesis",
+      "scope": "Learned integrators (family A)."
     },
     {
-      "id": "note:reading-priority",
-      "type": "note",
-      "label": "Reading priority (review §6)",
-      "summary": "Compare first: 1 LiFlow (how to learn time evolution directly; how diffusion is validated); 2 Molecular latent space simulators (learning true kinetics in a low-dimensional space); 3 Learning the Action (skipping time steps while keeping dynamical structure); 4 CG auto-encoders (learning a CG representation); 5 CG MD with memory (why an effective potential alone is insufficient). Keep Voter 2002, Kahle 2019 and k-ART as references. Three core strategies: learn a faster integrator; learn a reduced representation; learn an effective stochastic dynamics.",
+      "id": "claim:equilibrium-sampling-is-not-dynamics",
+      "type": "claim",
+      "label": "A model of the equilibrium distribution P(R) does not predict transitions P(R_{t+tau} | R_t), so equilibrium generators cannot give diffusion coefficients",
+      "summary": "Definitional, but worth a node because much generative molecular simulation targets equilibrium sampling rather than time evolution.",
       "status": "seed",
-      "source": "review"
+      "source": "review",
+      "claim_status": "hypothesis",
+      "scope": "Generative models (family F)."
+    },
+    {
+      "id": "claim:msd-agreement-insufficient",
+      "type": "claim",
+      "label": "Agreement in MSD does not establish correct migration mechanisms, transition rates or correlated motion",
+      "summary": "The central question about LiFlow and generative dynamics in general: whether a model that reproduces MSD also reproduces pathways, hop rates and cooperative hopping. No evidence either way in the reviewed papers.",
+      "status": "seed",
+      "source": "review",
+      "claim_status": "open",
+      "scope": "Generative dynamics models of ion transport."
+    },
+    {
+      "id": "claim:liflow-speedup-is-relative-to-aimd",
+      "type": "claim",
+      "label": "LiFlow's reported speed-up (about 600,000x) is relative to ab initio MD, not to GPU-accelerated MLIP-MD",
+      "summary": "The comparison in the paper is against first-principles simulation; the speed-up over an MLIP-MD baseline would be far smaller and is not reported.",
+      "status": "seed",
+      "source": "review",
+      "claim_status": "supported"
+    },
+    {
+      "id": "claim:short-md-insufficient",
+      "type": "claim",
+      "label": "Effective dynamics cannot be learned from short MD trajectories alone when important migration pathways never appear in them",
+      "summary": "If a pathway is absent from training data the model cannot identify it; enhanced sampling, active exploration or physical constraints may be required. Not tested in the reviewed papers.",
+      "status": "seed",
+      "source": "review",
+      "claim_status": "open",
+      "scope": "Learned dynamics models trained on short trajectories."
+    },
+    {
+      "id": "claim:what-to-eliminate-is-undetermined",
+      "type": "claim",
+      "label": "Which degrees of freedom coarse-graining should eliminate for solid electrolytes is undetermined",
+      "summary": "Candidates lose different information: high-frequency lattice vibrations (keeping coordinates); framework atoms (keeping ions and an effective environment); in-site vibrations (keeping occupancy and events); or all explicit structure (continuous latent dynamics).",
+      "status": "seed",
+      "source": "review",
+      "claim_status": "open",
+      "scope": "Solid-state electrolytes."
+    },
+    {
+      "id": "claim:validation-must-be-layered",
+      "type": "claim",
+      "label": "Structural and MSD agreement can coexist with wrong migration pathways, so validation must be layered by research goal",
+      "summary": "The reviewer's position: check structural, thermodynamic, kinetic, transport and mechanistic levels separately; a model with poor instantaneous positions but correct transition kinetics may still suit long-time transport.",
+      "status": "seed",
+      "source": "review",
+      "claim_status": "hypothesis",
+      "scope": "Any learned dynamics model."
+    },
+    {
+      "id": "claim:event-detection-is-not-prediction",
+      "type": "claim",
+      "label": "Automatic site and hop detection from trajectories is analysis, not a predictive kinetic model for new environments",
+      "summary": "Landmark analysis extracts sites and hops from existing trajectories; a model that predicts kinetics in unseen structures is a further step.",
+      "status": "seed",
+      "source": "review",
+      "claim_status": "hypothesis"
+    },
+    {
+      "id": "claim:event-driven-multiscale-for-electrolytes",
+      "type": "claim",
+      "label": "An event-driven multiscale scheme (simplified dynamics while an ion sits in a site, atomistic MLIP near a bottleneck) would suit solid electrolytes",
+      "summary": "The reviewer's proposal by analogy with adaptive resolution; not implemented in the reviewed literature.",
+      "status": "seed",
+      "source": "review",
+      "claim_status": "hypothesis",
+      "scope": "Solid-state electrolytes."
     }
   ],
   "edges": [
     {
-      "source": "question:main",
-      "target": "goal:spatial-cg",
-      "type": "relates",
-      "label": "decomposes into",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "question:main",
-      "target": "goal:temporal-acceleration",
-      "type": "relates",
-      "label": "decomposes into",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "question:main",
-      "target": "goal:dynamical-cg",
-      "type": "relates",
-      "label": "decomposes into",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "category:a",
-      "target": "goal:temporal-acceleration",
-      "type": "serves",
-      "label": "",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "category:b",
-      "target": "goal:spatial-cg",
-      "type": "serves",
-      "label": "",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "category:c",
-      "target": "goal:temporal-acceleration",
-      "type": "serves",
-      "label": "",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "category:d",
-      "target": "goal:temporal-acceleration",
-      "type": "serves",
-      "label": "",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "category:d",
-      "target": "goal:dynamical-cg",
-      "type": "serves",
-      "label": "",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "category:e",
-      "target": "goal:dynamical-cg",
-      "type": "serves",
-      "label": "",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "category:e",
-      "target": "goal:spatial-cg",
-      "type": "serves",
-      "label": "",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "category:f",
-      "target": "goal:temporal-acceleration",
-      "type": "serves",
-      "label": "",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "category:f",
-      "target": "goal:dynamical-cg",
-      "type": "serves",
-      "label": "",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "category:g",
-      "target": "goal:spatial-cg",
-      "type": "serves",
-      "label": "",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "category:g",
-      "target": "goal:temporal-acceleration",
-      "type": "serves",
-      "label": "",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "category:a",
-      "target": "category:f",
+      "source": "family:a",
+      "target": "family:f",
       "type": "contrasts",
-      "label": "both learn long-interval atomic motion",
-      "note": "A emphasises the physical structure of the integrator; F learns the distribution directly.",
+      "label": "integrator structure vs learned distribution",
+      "note": "Both learn atomic motion over long intervals; A keeps the geometric structure of the dynamics, F learns the transition distribution directly.",
       "status": "seed",
       "source_kind": "review"
     },
     {
-      "source": "category:c",
-      "target": "category:d",
+      "source": "family:c",
+      "target": "family:d",
       "type": "contrasts",
-      "label": "both accelerate rare events",
-      "note": "They differ in the conditions under which true time and dynamics can be recovered.",
+      "label": "biased sampling vs skipped waiting",
+      "note": "Both accelerate rare events; the conditions under which true time and dynamics are recovered differ.",
       "status": "seed",
       "source_kind": "review"
     },
     {
-      "source": "category:b",
-      "target": "category:e",
+      "source": "family:b",
+      "target": "family:e",
       "type": "contrasts",
-      "label": "both coarse-grain",
+      "label": "fewer atoms vs fewer states",
       "note": "B compresses atomic degrees of freedom; E compresses the state space.",
       "status": "seed",
       "source_kind": "review"
     },
     {
-      "source": "category:e",
-      "target": "category:f",
+      "source": "family:e",
+      "target": "family:f",
       "type": "contrasts",
-      "label": "both replace step-by-step MD",
-      "note": "E has explicit states, transitions and rates; F learns continuous or discrete probability distributions directly.",
+      "label": "explicit rates vs learned distributions",
+      "note": "Both replace step-by-step MD; E has explicit states, transitions and rates, F learns continuous or discrete distributions.",
       "status": "seed",
       "source_kind": "review"
     },
     {
-      "source": "category:a",
+      "source": "family:a",
+      "target": "technique:action-learning",
+      "type": "contains",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:b",
+      "target": "technique:force-matching",
+      "type": "contains",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:b",
+      "target": "technique:cg-autoencoder",
+      "type": "contains",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:b",
+      "target": "technique:gnn-cg-potential",
+      "type": "contains",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:b",
+      "target": "technique:generalized-langevin-memory",
+      "type": "contains",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:b",
+      "target": "technique:denoising-force-matching",
+      "type": "contains",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:c",
+      "target": "technique:metadynamics",
+      "type": "contains",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:c",
+      "target": "technique:infrequent-metadynamics",
+      "type": "contains",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:c",
+      "target": "technique:spib",
+      "type": "contains",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:c",
+      "target": "technique:weighted-ensemble",
+      "type": "contains",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:d",
+      "target": "technique:hyperdynamics",
+      "type": "contains",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:d",
+      "target": "technique:parallel-replica-dynamics",
+      "type": "contains",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:d",
+      "target": "technique:temperature-accelerated-dynamics",
+      "type": "contains",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:e",
+      "target": "technique:markov-state-model",
+      "type": "contains",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:e",
+      "target": "technique:vamp",
+      "type": "contains",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:e",
+      "target": "technique:kinetic-monte-carlo",
+      "type": "contains",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:e",
+      "target": "technique:k-art",
+      "type": "contains",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:e",
+      "target": "technique:landmark-analysis",
+      "type": "contains",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:f",
+      "target": "technique:flow-matching",
+      "type": "contains",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:f",
+      "target": "technique:latent-space-propagator",
+      "type": "contains",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:f",
+      "target": "technique:descriptor-trajectory-prediction",
+      "type": "contains",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:f",
+      "target": "technique:boltzmann-generator",
+      "type": "contains",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:g",
+      "target": "technique:adaptive-resolution",
+      "type": "contains",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "technique:infrequent-metadynamics",
+      "target": "technique:metadynamics",
+      "type": "extends",
+      "label": "rare bias deposition for rates",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "technique:k-art",
+      "target": "technique:kinetic-monte-carlo",
+      "type": "extends",
+      "label": "off-lattice, self-learning event catalog",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "technique:vamp",
+      "target": "technique:markov-state-model",
+      "type": "extends",
+      "label": "deep, end-to-end state decomposition",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "technique:denoising-force-matching",
+      "target": "technique:force-matching",
+      "type": "extends",
+      "label": "adds a denoising objective",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "technique:generalized-langevin-memory",
+      "target": "technique:force-matching",
+      "type": "extends",
+      "label": "adds memory, dissipation and noise to the CG potential",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "technique:latent-space-propagator",
+      "target": "technique:flow-matching",
+      "type": "contrasts",
+      "label": "explicit slow-variable dynamics vs direct displacement distribution",
+      "note": "LSS builds an explicit low-dimensional dynamics first; flow matching (LiFlow) learns the displacement distribution without one.",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "technique:boltzmann-generator",
+      "target": "technique:flow-matching",
+      "type": "contrasts",
+      "label": "samples P(R) vs learns P(dR | R_t, T)",
+      "note": "Equilibrium generation versus dynamical transitions.",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "quantity:diffusivity",
+      "target": "quantity:msd",
+      "type": "relates",
+      "label": "derived from the MSD slope",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "quantity:ionic-conductivity",
+      "target": "quantity:diffusivity",
+      "type": "relates",
+      "label": "from the charge diffusivity (Nernst-Einstein)",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "quantity:correlation-factor",
+      "target": "quantity:diffusivity",
+      "type": "relates",
+      "label": "tracer diffusivity over the random-walk value",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "quantity:correlation-factor",
+      "target": "quantity:hop-rate",
+      "type": "relates",
+      "label": "random-walk reference uses the hop rate",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "quantity:residence-time",
+      "target": "quantity:hop-rate",
+      "type": "relates",
+      "label": "inverse of the escape rate",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "quantity:site-occupancy",
+      "target": "quantity:residence-time",
+      "type": "relates",
+      "label": "occupancy from site residence",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:a",
       "target": "paper:bigi2026-learning-the-action",
       "type": "contains",
       "label": "",
@@ -785,7 +1381,16 @@
       "source_kind": "review"
     },
     {
-      "source": "category:b",
+      "source": "paper:bigi2026-learning-the-action",
+      "target": "technique:action-learning",
+      "type": "uses",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:b",
       "target": "paper:wang2019-cg-autoencoders",
       "type": "contains",
       "label": "",
@@ -794,7 +1399,25 @@
       "source_kind": "review"
     },
     {
-      "source": "category:b",
+      "source": "paper:wang2019-cg-autoencoders",
+      "target": "technique:cg-autoencoder",
+      "type": "uses",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "paper:wang2019-cg-autoencoders",
+      "target": "technique:force-matching",
+      "type": "uses",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:b",
       "target": "paper:wang2019-cgnet",
       "type": "contains",
       "label": "",
@@ -803,7 +1426,16 @@
       "source_kind": "review"
     },
     {
-      "source": "category:b",
+      "source": "paper:wang2019-cgnet",
+      "target": "technique:force-matching",
+      "type": "uses",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:b",
       "target": "paper:husic2020-cg-gnn",
       "type": "contains",
       "label": "",
@@ -812,170 +1444,8 @@
       "source_kind": "review"
     },
     {
-      "source": "category:b",
-      "target": "paper:lyu2023-cg-memory",
-      "type": "contains",
-      "label": "",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "category:b",
-      "target": "paper:durumeric2026-force-matching-denoising",
-      "type": "contains",
-      "label": "",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "category:c",
-      "target": "paper:tiwary2013-metadynamics-kinetics",
-      "type": "contains",
-      "label": "",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "category:c",
-      "target": "paper:wang2021-spib",
-      "type": "contains",
-      "label": "",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "category:c",
-      "target": "paper:mehdi2022-spib-metadynamics",
-      "type": "contains",
-      "label": "",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "category:c",
-      "target": "paper:zuckerman2017-weighted-ensemble",
-      "type": "contains",
-      "label": "",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "category:d",
-      "target": "paper:voter1997-hyperdynamics",
-      "type": "contains",
-      "label": "",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "category:d",
-      "target": "paper:voter2002-accelerated-md-review",
-      "type": "contains",
-      "label": "",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "category:e",
-      "target": "paper:mardt2018-vampnets",
-      "type": "contains",
-      "label": "",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "category:e",
-      "target": "paper:kahle2019-landmark-analysis",
-      "type": "contains",
-      "label": "",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "category:e",
-      "target": "paper:elmellouhi2008-kart",
-      "type": "contains",
-      "label": "",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "category:f",
-      "target": "paper:sidky2020-latent-space-simulators",
-      "type": "contains",
-      "label": "",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "category:f",
-      "target": "paper:swinburne2023-descriptor-trajectories",
-      "type": "contains",
-      "label": "",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "category:f",
-      "target": "paper:nam2025-liflow",
-      "type": "contains",
-      "label": "",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "category:g",
-      "target": "paper:praprotnik2005-adress",
-      "type": "contains",
-      "label": "",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "paper:bigi2026-learning-the-action",
-      "target": "concept:symplectic-time-reversible",
-      "type": "uses",
-      "label": "",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "paper:wang2019-cg-autoencoders",
-      "target": "concept:learned-cg-mapping",
-      "type": "uses",
-      "label": "",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "paper:wang2019-cg-autoencoders",
-      "target": "concept:latent-dynamics",
-      "type": "uses",
-      "label": "",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "paper:wang2019-cgnet",
-      "target": "concept:force-matching",
+      "source": "paper:husic2020-cg-gnn",
+      "target": "technique:gnn-cg-potential",
       "type": "uses",
       "label": "",
       "note": "",
@@ -984,7 +1454,25 @@
     },
     {
       "source": "paper:husic2020-cg-gnn",
-      "target": "concept:force-matching",
+      "target": "technique:force-matching",
+      "type": "uses",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:b",
+      "target": "paper:lyu2023-cg-memory",
+      "type": "contains",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "paper:lyu2023-cg-memory",
+      "target": "technique:generalized-langevin-memory",
       "type": "uses",
       "label": "",
       "note": "",
@@ -993,8 +1481,26 @@
     },
     {
       "source": "paper:lyu2023-cg-memory",
-      "target": "concept:mori-zwanzig-memory",
+      "target": "technique:force-matching",
       "type": "uses",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "paper:lyu2023-cg-memory",
+      "target": "quantity:diffusivity",
+      "type": "validates",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:b",
+      "target": "paper:durumeric2026-force-matching-denoising",
+      "type": "contains",
       "label": "",
       "note": "",
       "status": "seed",
@@ -1002,7 +1508,25 @@
     },
     {
       "source": "paper:durumeric2026-force-matching-denoising",
-      "target": "concept:force-matching",
+      "target": "technique:denoising-force-matching",
+      "type": "uses",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:c",
+      "target": "paper:tiwary2013-metadynamics-kinetics",
+      "type": "contains",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "paper:tiwary2013-metadynamics-kinetics",
+      "target": "technique:infrequent-metadynamics",
       "type": "uses",
       "label": "",
       "note": "",
@@ -1011,7 +1535,7 @@
     },
     {
       "source": "paper:tiwary2013-metadynamics-kinetics",
-      "target": "concept:transition-rates",
+      "target": "technique:metadynamics",
       "type": "uses",
       "label": "",
       "note": "",
@@ -1020,8 +1544,17 @@
     },
     {
       "source": "paper:tiwary2013-metadynamics-kinetics",
-      "target": "concept:collective-variables",
-      "type": "uses",
+      "target": "quantity:hop-rate",
+      "type": "validates",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:c",
+      "target": "paper:wang2021-spib",
+      "type": "contains",
       "label": "",
       "note": "",
       "status": "seed",
@@ -1029,7 +1562,25 @@
     },
     {
       "source": "paper:wang2021-spib",
-      "target": "concept:collective-variables",
+      "target": "technique:spib",
+      "type": "uses",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:c",
+      "target": "paper:mehdi2022-spib-metadynamics",
+      "type": "contains",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "paper:mehdi2022-spib-metadynamics",
+      "target": "technique:spib",
       "type": "uses",
       "label": "",
       "note": "",
@@ -1038,7 +1589,25 @@
     },
     {
       "source": "paper:mehdi2022-spib-metadynamics",
-      "target": "concept:collective-variables",
+      "target": "technique:metadynamics",
+      "type": "uses",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:c",
+      "target": "paper:zuckerman2017-weighted-ensemble",
+      "type": "contains",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "paper:zuckerman2017-weighted-ensemble",
+      "target": "technique:weighted-ensemble",
       "type": "uses",
       "label": "",
       "note": "",
@@ -1047,7 +1616,25 @@
     },
     {
       "source": "paper:zuckerman2017-weighted-ensemble",
-      "target": "concept:metastable-waiting",
+      "target": "quantity:hop-rate",
+      "type": "validates",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:d",
+      "target": "paper:voter1997-hyperdynamics",
+      "type": "contains",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "paper:voter1997-hyperdynamics",
+      "target": "technique:hyperdynamics",
       "type": "uses",
       "label": "",
       "note": "",
@@ -1056,16 +1643,25 @@
     },
     {
       "source": "paper:voter1997-hyperdynamics",
-      "target": "concept:metastable-waiting",
-      "type": "uses",
+      "target": "quantity:hop-rate",
+      "type": "validates",
       "label": "",
       "note": "",
       "status": "seed",
       "source_kind": "review"
     },
     {
-      "source": "paper:voter1997-hyperdynamics",
-      "target": "concept:transition-rates",
+      "source": "family:d",
+      "target": "paper:voter2002-accelerated-md-review",
+      "type": "contains",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "paper:voter2002-accelerated-md-review",
+      "target": "technique:hyperdynamics",
       "type": "uses",
       "label": "",
       "note": "",
@@ -1074,7 +1670,7 @@
     },
     {
       "source": "paper:voter2002-accelerated-md-review",
-      "target": "concept:metastable-waiting",
+      "target": "technique:parallel-replica-dynamics",
       "type": "uses",
       "label": "",
       "note": "",
@@ -1083,7 +1679,43 @@
     },
     {
       "source": "paper:voter2002-accelerated-md-review",
-      "target": "concept:kmc",
+      "target": "technique:temperature-accelerated-dynamics",
+      "type": "uses",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "paper:voter2002-accelerated-md-review",
+      "target": "technique:kinetic-monte-carlo",
+      "type": "uses",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "paper:voter2002-accelerated-md-review",
+      "target": "quantity:hop-rate",
+      "type": "validates",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:e",
+      "target": "paper:mardt2018-vampnets",
+      "type": "contains",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "paper:mardt2018-vampnets",
+      "target": "technique:vamp",
       "type": "uses",
       "label": "",
       "note": "",
@@ -1092,7 +1724,34 @@
     },
     {
       "source": "paper:mardt2018-vampnets",
-      "target": "concept:msm",
+      "target": "technique:markov-state-model",
+      "type": "uses",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "paper:mardt2018-vampnets",
+      "target": "quantity:transition-probability",
+      "type": "validates",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:e",
+      "target": "paper:kahle2019-landmark-analysis",
+      "type": "contains",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "paper:kahle2019-landmark-analysis",
+      "target": "technique:landmark-analysis",
       "type": "uses",
       "label": "",
       "note": "",
@@ -1101,7 +1760,34 @@
     },
     {
       "source": "paper:kahle2019-landmark-analysis",
-      "target": "concept:transition-rates",
+      "target": "quantity:residence-time",
+      "type": "validates",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "paper:kahle2019-landmark-analysis",
+      "target": "quantity:hop-rate",
+      "type": "validates",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:e",
+      "target": "paper:elmellouhi2008-kart",
+      "type": "contains",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "paper:elmellouhi2008-kart",
+      "target": "technique:k-art",
       "type": "uses",
       "label": "",
       "note": "",
@@ -1110,7 +1796,43 @@
     },
     {
       "source": "paper:elmellouhi2008-kart",
-      "target": "concept:kmc",
+      "target": "technique:kinetic-monte-carlo",
+      "type": "uses",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "paper:elmellouhi2008-kart",
+      "target": "quantity:hop-rate",
+      "type": "validates",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "paper:elmellouhi2008-kart",
+      "target": "quantity:migration-pathway",
+      "type": "validates",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:f",
+      "target": "paper:sidky2020-latent-space-simulators",
+      "type": "contains",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "paper:sidky2020-latent-space-simulators",
+      "target": "technique:latent-space-propagator",
       "type": "uses",
       "label": "",
       "note": "",
@@ -1119,8 +1841,17 @@
     },
     {
       "source": "paper:sidky2020-latent-space-simulators",
-      "target": "concept:latent-dynamics",
-      "type": "uses",
+      "target": "quantity:transition-probability",
+      "type": "validates",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:f",
+      "target": "paper:swinburne2023-descriptor-trajectories",
+      "type": "contains",
       "label": "",
       "note": "",
       "status": "seed",
@@ -1128,7 +1859,25 @@
     },
     {
       "source": "paper:swinburne2023-descriptor-trajectories",
-      "target": "concept:latent-dynamics",
+      "target": "technique:descriptor-trajectory-prediction",
+      "type": "uses",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:f",
+      "target": "paper:nam2025-liflow",
+      "type": "contains",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "paper:nam2025-liflow",
+      "target": "technique:flow-matching",
       "type": "uses",
       "label": "",
       "note": "",
@@ -1137,7 +1886,25 @@
     },
     {
       "source": "paper:nam2025-liflow",
-      "target": "concept:flow-matching",
+      "target": "quantity:msd",
+      "type": "validates",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:f",
+      "target": "paper:noe2019-boltzmann-generators",
+      "type": "contains",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "paper:noe2019-boltzmann-generators",
+      "target": "technique:boltzmann-generator",
       "type": "uses",
       "label": "",
       "note": "",
@@ -1146,7 +1913,25 @@
     },
     {
       "source": "paper:noe2019-boltzmann-generators",
-      "target": "concept:equilibrium-vs-dynamics",
+      "target": "quantity:free-energy-difference",
+      "type": "validates",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "family:g",
+      "target": "paper:praprotnik2005-adress",
+      "type": "contains",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "paper:praprotnik2005-adress",
+      "target": "technique:adaptive-resolution",
       "type": "uses",
       "label": "",
       "note": "",
@@ -1166,7 +1951,7 @@
       "source": "paper:mehdi2022-spib-metadynamics",
       "target": "paper:wang2021-spib",
       "type": "extends",
-      "label": "uses SPIB CVs for metadynamics",
+      "label": "uses SPIB coordinates to bias metadynamics",
       "note": "",
       "status": "seed",
       "source_kind": "review"
@@ -1185,7 +1970,7 @@
       "target": "paper:nam2025-liflow",
       "type": "contrasts",
       "label": "explicit latent slow-variable model vs direct displacement distribution",
-      "note": "LSS first builds an explicit low-dimensional slow-variable dynamics; LiFlow learns the conditional displacement distribution without one. They compress physical information differently.",
+      "note": "",
       "status": "seed",
       "source_kind": "review"
     },
@@ -1194,7 +1979,7 @@
       "target": "paper:nam2025-liflow",
       "type": "contrasts",
       "label": "equilibrium sampling vs dynamics",
-      "note": "Both avoid step-by-step MD, but Boltzmann generators sample P(R) while LiFlow learns P(ΔR | R_t, T).",
+      "note": "",
       "status": "seed",
       "source_kind": "review"
     },
@@ -1202,8 +1987,8 @@
       "source": "paper:kahle2019-landmark-analysis",
       "target": "paper:elmellouhi2008-kart",
       "type": "relates",
-      "label": "automatic event discovery",
-      "note": "Both find sites and events automatically; landmark analysis analyses trajectories, k-ART drives a kMC simulation.",
+      "label": "automatic event discovery: analysis vs simulation",
+      "note": "",
       "status": "seed",
       "source_kind": "review"
     },
@@ -1211,374 +1996,358 @@
       "source": "paper:wang2019-cg-autoencoders",
       "target": "paper:wang2019-cgnet",
       "type": "relates",
-      "label": "same year, learned mapping vs fixed mapping",
+      "label": "learned mapping vs fixed mapping",
       "note": "",
       "status": "seed",
       "source_kind": "review"
     },
     {
-      "source": "paper:bigi2026-learning-the-action",
-      "target": "concept:transition-rates",
-      "type": "raises",
-      "label": "does symplecticity imply correct diffusivity?",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "paper:nam2025-liflow",
-      "target": "concept:transition-rates",
-      "type": "raises",
-      "label": "does MSD agreement imply correct mechanisms and rates?",
+      "source": "paper:lyu2023-cg-memory",
+      "target": "claim:cg-potential-does-not-fix-time-scales",
+      "type": "supports",
+      "label": "",
       "note": "",
       "status": "seed",
       "source_kind": "review"
     },
     {
       "source": "paper:wang2019-cg-autoencoders",
-      "target": "concept:mori-zwanzig-memory",
-      "type": "raises",
-      "label": "correct equilibrium does not fix CG time scales",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "concept:equilibrium-vs-dynamics",
-      "target": "concept:transition-rates",
-      "type": "relates",
+      "target": "claim:cg-potential-does-not-fix-time-scales",
+      "type": "supports",
       "label": "",
       "note": "",
       "status": "seed",
       "source_kind": "review"
     },
     {
-      "source": "concept:collective-variables",
-      "target": "concept:transition-rates",
-      "type": "relates",
-      "label": "more transitions sampled ≠ rates recovered",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "category:a",
-      "target": "application:sse-li-transport",
-      "type": "applies_to",
-      "label": "relevance 4/5 (review's judgement)",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review",
-      "weight": 4
-    },
-    {
-      "source": "category:b",
-      "target": "application:sse-li-transport",
-      "type": "applies_to",
-      "label": "relevance 3/5 (review's judgement)",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review",
-      "weight": 3
-    },
-    {
-      "source": "category:c",
-      "target": "application:sse-li-transport",
-      "type": "applies_to",
-      "label": "relevance 5/5 (review's judgement)",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review",
-      "weight": 5
-    },
-    {
-      "source": "category:d",
-      "target": "application:sse-li-transport",
-      "type": "applies_to",
-      "label": "relevance 5/5 (review's judgement)",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review",
-      "weight": 5
-    },
-    {
-      "source": "category:e",
-      "target": "application:sse-li-transport",
-      "type": "applies_to",
-      "label": "relevance 5/5 (review's judgement)",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review",
-      "weight": 5
-    },
-    {
-      "source": "category:f",
-      "target": "application:sse-li-transport",
-      "type": "applies_to",
-      "label": "relevance 5/5 (review's judgement)",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review",
-      "weight": 5
-    },
-    {
-      "source": "category:g",
-      "target": "application:sse-li-transport",
-      "type": "applies_to",
-      "label": "relevance 4/5 (review's judgement)",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review",
-      "weight": 4
-    },
-    {
-      "source": "concept:validation-hierarchy",
-      "target": "application:sse-li-transport",
-      "type": "applies_to",
+      "source": "claim:cg-potential-does-not-fix-time-scales",
+      "target": "technique:force-matching",
+      "type": "about",
       "label": "",
       "note": "",
       "status": "seed",
       "source_kind": "review"
     },
     {
-      "source": "concept:validation-hierarchy",
-      "target": "concept:transition-rates",
-      "type": "relates",
-      "label": "kinetic and transport levels",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "question:main",
-      "target": "challenge:preserve-true-kinetics",
-      "type": "raises",
+      "source": "claim:cg-potential-does-not-fix-time-scales",
+      "target": "technique:generalized-langevin-memory",
+      "type": "about",
       "label": "",
       "note": "",
       "status": "seed",
       "source_kind": "review"
     },
     {
-      "source": "question:main",
-      "target": "challenge:what-to-eliminate",
-      "type": "raises",
+      "source": "claim:cg-potential-does-not-fix-time-scales",
+      "target": "family:b",
+      "type": "about",
       "label": "",
       "note": "",
       "status": "seed",
       "source_kind": "review"
     },
     {
-      "source": "question:main",
-      "target": "challenge:learn-from-short-md",
-      "type": "raises",
+      "source": "claim:host-lattice-effects-persist",
+      "target": "family:b",
+      "type": "about",
       "label": "",
       "note": "",
       "status": "seed",
       "source_kind": "review"
     },
     {
-      "source": "question:main",
-      "target": "challenge:validate-cg-dynamics",
-      "type": "raises",
+      "source": "claim:host-lattice-effects-persist",
+      "target": "technique:generalized-langevin-memory",
+      "type": "about",
       "label": "",
       "note": "",
       "status": "seed",
       "source_kind": "review"
     },
     {
-      "source": "challenge:validate-cg-dynamics",
-      "target": "concept:validation-hierarchy",
-      "type": "relates",
-      "label": "answered partly by",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "challenge:learn-from-short-md",
-      "target": "category:c",
-      "type": "relates",
-      "label": "enhanced sampling may be needed",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "challenge:learn-from-short-md",
-      "target": "category:g",
-      "type": "relates",
-      "label": "active learning may be needed",
-      "note": "",
-      "status": "seed",
-      "source_kind": "review"
-    },
-    {
-      "source": "challenge:what-to-eliminate",
-      "target": "goal:spatial-cg",
-      "type": "relates",
+      "source": "paper:wang2019-cg-autoencoders",
+      "target": "claim:learned-cg-mapping",
+      "type": "supports",
       "label": "",
       "note": "",
       "status": "seed",
       "source_kind": "review"
     },
     {
-      "source": "challenge:what-to-eliminate",
-      "target": "goal:dynamical-cg",
-      "type": "relates",
+      "source": "claim:learned-cg-mapping",
+      "target": "technique:cg-autoencoder",
+      "type": "about",
       "label": "",
       "note": "",
       "status": "seed",
       "source_kind": "review"
     },
     {
-      "source": "challenge:preserve-true-kinetics",
-      "target": "concept:transition-rates",
-      "type": "relates",
+      "source": "paper:tiwary2013-metadynamics-kinetics",
+      "target": "claim:more-transitions-not-rates",
+      "type": "supports",
       "label": "",
       "note": "",
       "status": "seed",
       "source_kind": "review"
     },
     {
-      "source": "challenge:preserve-true-kinetics",
-      "target": "concept:equilibrium-vs-dynamics",
-      "type": "relates",
+      "source": "paper:zuckerman2017-weighted-ensemble",
+      "target": "claim:more-transitions-not-rates",
+      "type": "supports",
       "label": "",
       "note": "",
       "status": "seed",
       "source_kind": "review"
     },
     {
-      "source": "note:goal-to-method-map",
-      "target": "category:a",
-      "type": "relates",
+      "source": "claim:more-transitions-not-rates",
+      "target": "family:c",
+      "type": "about",
       "label": "",
       "note": "",
       "status": "seed",
       "source_kind": "review"
     },
     {
-      "source": "note:goal-to-method-map",
-      "target": "category:b",
-      "type": "relates",
+      "source": "claim:more-transitions-not-rates",
+      "target": "quantity:hop-rate",
+      "type": "about",
       "label": "",
       "note": "",
       "status": "seed",
       "source_kind": "review"
     },
     {
-      "source": "note:goal-to-method-map",
-      "target": "category:c",
-      "type": "relates",
+      "source": "paper:voter1997-hyperdynamics",
+      "target": "claim:waiting-time-dominates",
+      "type": "supports",
       "label": "",
       "note": "",
       "status": "seed",
       "source_kind": "review"
     },
     {
-      "source": "note:goal-to-method-map",
-      "target": "category:d",
-      "type": "relates",
+      "source": "paper:voter2002-accelerated-md-review",
+      "target": "claim:waiting-time-dominates",
+      "type": "supports",
       "label": "",
       "note": "",
       "status": "seed",
       "source_kind": "review"
     },
     {
-      "source": "note:goal-to-method-map",
-      "target": "category:e",
-      "type": "relates",
+      "source": "claim:waiting-time-dominates",
+      "target": "family:d",
+      "type": "about",
       "label": "",
       "note": "",
       "status": "seed",
       "source_kind": "review"
     },
     {
-      "source": "note:goal-to-method-map",
-      "target": "category:f",
-      "type": "relates",
+      "source": "claim:waiting-time-dominates",
+      "target": "technique:hyperdynamics",
+      "type": "about",
       "label": "",
       "note": "",
       "status": "seed",
       "source_kind": "review"
     },
     {
-      "source": "note:goal-to-method-map",
-      "target": "category:g",
-      "type": "relates",
+      "source": "claim:symplecticity-not-sufficient-for-diffusion",
+      "target": "technique:action-learning",
+      "type": "about",
       "label": "",
       "note": "",
       "status": "seed",
       "source_kind": "review"
     },
     {
-      "source": "note:reading-priority",
-      "target": "paper:nam2025-liflow",
-      "type": "relates",
-      "label": "priority 1",
+      "source": "claim:symplecticity-not-sufficient-for-diffusion",
+      "target": "quantity:diffusivity",
+      "type": "about",
+      "label": "",
       "note": "",
       "status": "seed",
       "source_kind": "review"
     },
     {
-      "source": "note:reading-priority",
-      "target": "paper:sidky2020-latent-space-simulators",
-      "type": "relates",
-      "label": "priority 2",
+      "source": "claim:equilibrium-sampling-is-not-dynamics",
+      "target": "technique:boltzmann-generator",
+      "type": "about",
+      "label": "",
       "note": "",
       "status": "seed",
       "source_kind": "review"
     },
     {
-      "source": "note:reading-priority",
-      "target": "paper:bigi2026-learning-the-action",
-      "type": "relates",
-      "label": "priority 3",
+      "source": "claim:equilibrium-sampling-is-not-dynamics",
+      "target": "quantity:diffusivity",
+      "type": "about",
+      "label": "",
       "note": "",
       "status": "seed",
       "source_kind": "review"
     },
     {
-      "source": "note:reading-priority",
-      "target": "paper:wang2019-cg-autoencoders",
-      "type": "relates",
-      "label": "priority 4",
+      "source": "claim:msd-agreement-insufficient",
+      "target": "technique:flow-matching",
+      "type": "about",
+      "label": "",
       "note": "",
       "status": "seed",
       "source_kind": "review"
     },
     {
-      "source": "note:reading-priority",
-      "target": "paper:lyu2023-cg-memory",
-      "type": "relates",
-      "label": "priority 5",
+      "source": "claim:msd-agreement-insufficient",
+      "target": "quantity:msd",
+      "type": "about",
+      "label": "",
       "note": "",
       "status": "seed",
       "source_kind": "review"
     },
     {
-      "source": "note:reading-priority",
-      "target": "paper:voter2002-accelerated-md-review",
-      "type": "relates",
-      "label": "reference baseline",
+      "source": "claim:msd-agreement-insufficient",
+      "target": "quantity:migration-pathway",
+      "type": "about",
+      "label": "",
       "note": "",
       "status": "seed",
       "source_kind": "review"
     },
     {
-      "source": "note:reading-priority",
-      "target": "paper:kahle2019-landmark-analysis",
-      "type": "relates",
-      "label": "reference baseline",
+      "source": "paper:nam2025-liflow",
+      "target": "claim:liflow-speedup-is-relative-to-aimd",
+      "type": "supports",
+      "label": "",
       "note": "",
       "status": "seed",
       "source_kind": "review"
     },
     {
-      "source": "note:reading-priority",
-      "target": "paper:elmellouhi2008-kart",
-      "type": "relates",
-      "label": "reference baseline",
+      "source": "claim:liflow-speedup-is-relative-to-aimd",
+      "target": "technique:flow-matching",
+      "type": "about",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "claim:short-md-insufficient",
+      "target": "family:f",
+      "type": "about",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "claim:short-md-insufficient",
+      "target": "family:c",
+      "type": "about",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "claim:what-to-eliminate-is-undetermined",
+      "target": "family:b",
+      "type": "about",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "claim:what-to-eliminate-is-undetermined",
+      "target": "family:e",
+      "type": "about",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "claim:what-to-eliminate-is-undetermined",
+      "target": "family:f",
+      "type": "about",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "claim:validation-must-be-layered",
+      "target": "quantity:msd",
+      "type": "about",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "claim:validation-must-be-layered",
+      "target": "quantity:migration-pathway",
+      "type": "about",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "claim:validation-must-be-layered",
+      "target": "quantity:hop-rate",
+      "type": "about",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "claim:validation-must-be-layered",
+      "target": "quantity:rdf",
+      "type": "about",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "claim:validation-must-be-layered",
+      "target": "quantity:site-occupancy",
+      "type": "about",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "claim:event-detection-is-not-prediction",
+      "target": "technique:landmark-analysis",
+      "type": "about",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "claim:event-driven-multiscale-for-electrolytes",
+      "target": "family:g",
+      "type": "about",
+      "label": "",
+      "note": "",
+      "status": "seed",
+      "source_kind": "review"
+    },
+    {
+      "source": "claim:event-driven-multiscale-for-electrolytes",
+      "target": "technique:adaptive-resolution",
+      "type": "about",
+      "label": "",
       "note": "",
       "status": "seed",
       "source_kind": "review"

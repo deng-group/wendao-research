@@ -1,195 +1,241 @@
-# Literature review: molecular dynamics coarse-graining and acceleration
+# Literature review: MD coarse-graining and acceleration for ion transport in solid-state electrolytes
 
-**Scope: from classical accelerated MD, through machine-learning-based coarse-graining, to generative dynamics models that replace MD altogether.**
+Written in the five-level form of [the graph schema](../../../docs/GRAPH_SCHEMA.md): method families,
+techniques, papers, claims, quantities. `graph.json` in this workspace is this document as a graph; ids in
+brackets are its node ids.
 
-Rather than restricting the review to coarse-grained molecular dynamics in the traditional sense, it addresses a broader question:
+## The question
 
-> **Can we learn an efficient representation or dynamics model from atomistic simulations, enabling accurate predictions at larger spatial and temporal scales?**
+> Can we learn an efficient representation or dynamics model from atomistic simulations (MLIP-MD, AIMD) that
+> predicts Li-ion transport accurately at larger spatial and temporal scales?
 
-The question contains three distinct goals, which can be pursued separately or combined:
+"Accurately" means the transport and mechanistic quantities: diffusivity, ionic conductivity, hop rates,
+migration pathways, correlated migration. The question has three separable aims: spatial coarse-graining
+(fewer degrees of freedom), temporal acceleration (fewer steps per unit of physical time), and dynamical
+coarse-graining (learn hops, state transitions and rates instead of atomic motion). The distinction that
+matters most across all of them: whether a method only samples structures faster, or preserves the true
+dynamics. The first is comparatively easy; the second is what transport prediction needs.
 
-1. **Spatial coarse-graining**: reduce the number of simulated degrees of freedom, e.g. represent several atoms as one particle, or keep only the occupancy state of mobile ions.
-2. **Temporal acceleration**: reduce the number of computational steps needed per unit of physical time, e.g. predict the state 1 ps ahead directly instead of integrating 1 fs steps.
-3. **Dynamical coarse-graining**: stop tracking the full atomic motion and learn ion hops, state transitions or other higher-level dynamical rules instead.
+## Level 1: method families
 
-## 1. Proposed classification
+Each family is defined by what it keeps or learns, what it discards, and what it still has to compute.
+Relevance is the reviewer's judgement against the question above (1 to 5), not a result from the literature.
 
-Seven method families.
-
-| Family | Core idea | Representative methods | Still runs MD? | Relevance to solid-state batteries |
+| Family | Keeps / learns | Discards | Still computes | Relevance |
 |---|---|---|---|---|
-| **A. Fast MD / learned integrator** | Larger time steps while preserving the true dynamics as far as possible | Symplectic ML, action learning | Yes, with fewer steps | 4/5 |
-| **B. Spatial coarse-graining** | Fewer degrees of freedom; learn an effective potential and dynamics | CGnet, CG-VAE, force matching | Yes, in CG space | 3/5 |
-| **C. Enhanced sampling** | Accelerate rare events; reach hard-to-sample states | Metadynamics, OPES, umbrella sampling | Yes, usually with a bias | 5/5 |
-| **D. Accelerated dynamics** | Skip the long, uneventful waiting times | Hyperdynamics, TAD, parallel replica | Yes, with an acceleration strategy | 5/5 |
-| **E. Kinetic coarse-graining** | Turn continuous trajectories into states and transitions | MSM, kMC, TPT | Not necessarily | 5/5 |
-| **F. Generative dynamics / neural simulator** | Learn the distribution of future states or state transitions directly | Flow matching, diffusion, latent dynamics | Not at inference | 5/5 |
-| **G. Adaptive / multiscale simulation** | Allocate compute by region, time or event importance | Adaptive resolution, concurrent multiscale, active learning | In some regions or stages | 4/5 |
+| **A. Fast MD / learned integrator** [family:a] | Full atomistic description; symplecticity and time reversibility of the dynamics | The intermediate integration steps | MD, with far fewer steps | 4 |
+| **B. Spatial coarse-graining** [family:b] | A reduced set of degrees of freedom and an effective potential, optionally memory and noise | The eliminated atoms' explicit motion | MD in CG space | 3 |
+| **C. Enhanced sampling** [family:c] | All atoms | The natural visiting order of states (a bias is added) | Biased MD; rates must be recovered | 5 |
+| **D. Accelerated dynamics** [family:d] | Correct state-to-state dynamics of activated processes | The waiting time in metastable basins | MD with an acceleration strategy | 5 |
+| **E. Kinetic coarse-graining** [family:e] | Discrete states and the transition probabilities or rates between them | Continuous motion within a state | MD only to build the model | 5 |
+| **F. Generative dynamics / neural simulators** [family:f] | A learned distribution over future states or displacements, or a latent dynamics with a decoder | Step-by-step integration | MD only for training data | 5 |
+| **G. Adaptive / multiscale simulation** [family:g] | Full resolution where and when it matters | Resolution elsewhere | Atomistic MD in part of the system or time | 4 |
 
-The relevance scores are the reviewer's subjective judgement against the researcher's problem (ion transport in solid-state electrolytes), not quantitative conclusions from the literature.
+Stated contrasts between families: A and F both learn long-interval atomic motion, but A keeps the geometric
+structure of the integrator while F learns the transition distribution directly. C and D both accelerate
+rare events, but the conditions under which true time and dynamics are recovered differ. B and E both
+coarse-grain, but B compresses atoms and E compresses the state space. E and F both replace step-by-step MD,
+but E has explicit states, transitions and rates while F learns distributions.
 
-The families overlap:
+## Level 2: techniques
 
-- A and F both learn atomic motion over long time intervals, but A emphasises the physical structure of the integrator.
-- C and D both accelerate rare events, but the conditions under which true time and dynamics can be recovered differ.
-- B and E are both coarse-graining, but B compresses atomic degrees of freedom while E compresses the state space.
-- E and F both replace step-by-step atomistic simulation, but E has explicit states, transitions and rates, whereas F learns continuous or discrete probability distributions directly.
+| Family | Technique | One line |
+|---|---|---|
+| A | Action learning [technique:action-learning] | Learn the action of a long interval so the induced map is symplectic and time-reversible |
+| B | Force matching [technique:force-matching] | Fit a CG potential to projected atomistic forces; gives the CG free-energy surface |
+| B | Coarse-graining auto-encoder [technique:cg-autoencoder] | Encoder = CG mapping, trained with a CG force field and a decoder |
+| B | GNN CG potential [technique:gnn-cg-potential] | A graph neural network over beads as the transferable CG interaction |
+| B | Generalized Langevin / Mori-Zwanzig memory [technique:generalized-langevin-memory] | CG dynamics with memory kernel, dissipation and noise from the eliminated degrees of freedom |
+| B | Denoising force matching [technique:denoising-force-matching] | Force matching plus a denoising objective; far less data |
+| C | Metadynamics [technique:metadynamics] | History-dependent bias along collective variables |
+| C | Infrequent metadynamics [technique:infrequent-metadynamics] | Rare bias deposition; rescale escape times to recover unbiased rates |
+| C | SPIB [technique:spib] | Reaction coordinate as the information bottleneck predicting the future state |
+| C | Weighted ensemble [technique:weighted-ensemble] | Split and merge unbiased trajectories with weights; rates from weight flux |
+| D | Hyperdynamics [technique:hyperdynamics] | Bias that raises basins and vanishes at dividing surfaces; clock advanced by the boost |
+| D | Parallel replica dynamics [technique:parallel-replica-dynamics] | Independent replicas; first escape is the next event |
+| D | Temperature-accelerated dynamics [technique:temperature-accelerated-dynamics] | Escapes at high T, filtered to the low-T sequence by harmonic TST |
+| E | Markov state model [technique:markov-state-model] | Discrete states and P(s_{t+tau} given s_t) |
+| E | VAMP [technique:vamp] | Variational score to train deep state decompositions (VAMPnets) |
+| E | Kinetic Monte Carlo [technique:kinetic-monte-carlo] | Stochastic transitions from an event catalog with rates |
+| E | k-ART [technique:k-art] | Off-lattice self-learning kMC; events found from local environments |
+| E | Landmark analysis [technique:landmark-analysis] | Sites and hops from a trajectory without a predefined lattice |
+| F | Flow matching [technique:flow-matching] | Velocity field transporting a prior to the conditional displacement distribution |
+| F | Latent-space propagator [technique:latent-space-propagator] | Encode to slow variables, propagate there, decode |
+| F | Descriptor-space prediction [technique:descriptor-trajectory-prediction] | Predict descriptor statistics as a time series, with uncertainty |
+| F | Boltzmann generator [technique:boltzmann-generator] | Normalizing flow sampling P(R) directly; equilibrium, not dynamics |
+| G | Adaptive resolution (AdResS) [technique:adaptive-resolution] | Molecules change resolution by region |
 
-**The distinction that matters most is whether a method merely samples structures faster, or preserves the true dynamics.** Obtaining stable structures or equilibrium distributions is comparatively easy; predicting diffusivity, ionic conductivity, hop rates or correlated migration is much more demanding.
+Techniques not yet backed by a paper in this review (OPES, umbrella sampling, transition path theory) are
+not in the graph; they enter when a paper that uses them does.
 
-## 2. The three starting papers
+## Level 3: papers
 
-### Paper 1: Learning the Action for Long-Time-Step Simulations of Molecular Dynamics
-
-**Bigi et al., Physical Review Letters, 2026.** [doi:10.1103/shj2-hyw8](https://doi.org/10.1103/shj2-hyw8). Family A.
-
-Conventional MD integrates Newton's equations one step at a time, (R_t, V_t) → (R_{t+Δt}, V_{t+Δt}). This paper learns a dynamical map over a long time interval directly and uses a learned mechanical action to guarantee important physical structure, including symplecticity and time reversibility. The authors argue this avoids the energy conservation and equipartition problems of ordinary ML trajectory predictors. The model learns from short trajectories and transfers across temperatures and chemical compositions.
-
-It is not coarse-graining: no degrees of freedom are removed. The question it addresses is whether intermediate MD steps can be skipped without destroying the physical structure of the dynamics. For MLIP-based atomistic work this is an attractive route: keep the atomistic description, reduce the number of steps. Whether it preserves long-time diffusion statistics is the point to check; symplecticity does not automatically imply correct diffusivities or rare-event rates.
-
-### Paper 2: Coarse-graining auto-encoders for molecular dynamics
-
-**Wang & Gómez-Bombarelli, npj Computational Materials, 2019.** [doi:10.1038/s41524-019-0261-5](https://doi.org/10.1038/s41524-019-0261-5). Family B.
-
-Closest to the traditional CG definition, in three steps: all-atom R → (encoder) CG variables z → (CG dynamics) z' → (decoder) R'. A VAE learns the coarse-grained representation, the corresponding effective force field, and the reconstruction of atomistic configurations. The key contribution is combining CG mapping, CG potential and reconstruction in one machine-learning framework; the valuable idea is that the mapping itself need not be specified by hand.
-
-Open issue: a CG potential that describes the equilibrium distribution correctly does not give the CG dynamics the correct time scales, which matters for ionic diffusion.
-
-### Paper 3: Flow matching for accelerated simulation of atomic transport in crystalline materials
-
-**Nam et al., Nature Machine Intelligence, 2025.** [doi:10.1038/s42256-025-01125-4](https://doi.org/10.1038/s42256-025-01125-4) | [GitHub](https://github.com/learningmatter-mit/liflow). Family F.
-
-From Rafael Gómez-Bombarelli's group; first author Juno Nam (Jiayu Peng, a co-author, worked in the same group). The method, **LiFlow**, does not generate each step by MD integration; it learns P(ΔR | R_t, T), the distribution of atomic displacements over a time interval given the current structure and temperature, with flow matching. A Propagator generates the displacements and a Corrector repairs unphysical structures.
-
-Reported in the paper: training data from 4,186 candidate solid electrolytes; 25 ps MD trajectories at several temperatures; Spearman correlation of about 0.7 to 0.8 for Li MSD on unseen compositions; up to about 600,000× speed-up relative to first-principles simulation. The last number is relative to AIMD, not to GPU-accelerated MLIP-MD.
-
-This is the closest to the researcher's work. It still needs MD training data, but once trained no MD integration is required. The question to pursue: can a generative model reproduce not only MSD but also the correct ion migration mechanisms, transition rates and correlated motions? That matters more than raw speed.
-
-## 3. Representative literature by family
+For every paper: what it learns, what it discards, and the validation levels it reports evidence for
+(structural, thermodynamic, kinetic, transport, mechanistic). The validation levels were assigned from the
+review's reading of each paper; verify against the paper before relying on them.
 
 ### A. Fast MD / learned integrator
 
-| Paper | Contribution |
-|---|---|
-| [Bigi et al., PRL (2026)](https://doi.org/10.1103/shj2-hyw8) | Learned action; long-time-step integration that preserves geometric structure |
+**Bigi et al., PRL 2026, Learning the Action for Long-Time-Step Simulations of MD** [paper:bigi2026-learning-the-action], [doi:10.1103/shj2-hyw8](https://doi.org/10.1103/shj2-hyw8). Reading priority 3.
+Learns a long-time-step map of positions and velocities through a learned action that enforces symplecticity
+and time reversibility. Discards nothing in the degrees of freedom; skips the intermediate steps. Validated:
+structural, thermodynamic (conservation, equipartition). Trains from short trajectories and transfers across
+temperatures and compositions. Open: whether long-time diffusion statistics are preserved (see claim below).
 
-Keeps the atomistic description, needs no predefined migration sites. How to take large time steps when fast lattice vibrations are strongly coupled to slow ion migration remains to be studied.
+### B. Spatial coarse-graining
 
-### B. Spatial coarse-graining / ML coarse-grained force fields
+**Wang & Gomez-Bombarelli, npj Comput. Mater. 2019, Coarse-graining auto-encoders** [paper:wang2019-cg-autoencoders], [doi:10.1038/s41524-019-0261-5](https://doi.org/10.1038/s41524-019-0261-5). Priority 4.
+Learns the CG mapping, the CG force field and a decoder jointly. Discards the eliminated atoms; the CG
+dynamics are not matched to atomistic time scales. Validated: structural, thermodynamic.
 
-| Paper | Contribution |
-|---|---|
-| [Wang & Gómez-Bombarelli, npj Comput. Mater. (2019)](https://doi.org/10.1038/s41524-019-0261-5) | VAE learns the CG mapping and the effective potential |
-| [Wang et al., ACS Central Science (2019)](https://doi.org/10.1021/acscentsci.8b00913) | CGnet: CG free-energy function learned by force matching |
-| [Husic et al., J. Chem. Phys. (2020)](https://pmc.ncbi.nlm.nih.gov/articles/PMC7671749/) | Graph neural networks for coarse-grained interactions |
-| [Lyu & Lei, PRL (2023)](https://doi.org/10.1103/PhysRevLett.131.177301) | Many-body memory improves the description of collective transport and diffusion |
-| [Durumeric et al., Nature Communications (2026)](https://doi.org/10.1038/s41467-026-70818-0) | Force matching combined with denoising; much lower data requirement for CG models |
+**Wang et al., ACS Cent. Sci. 2019, CGnet** [paper:wang2019-cgnet], [doi:10.1021/acscentsci.8b00913](https://doi.org/10.1021/acscentsci.8b00913).
+Learns a CG free-energy function by force matching. Discards eliminated atoms, memory and friction.
+Validated: thermodynamic, structural.
 
-Lyu & Lei (2023) deserves attention. Traditional coarse-graining tends to ignore the effect of eliminated degrees of freedom on the dynamics. In the Mori–Zwanzig framework, CG dynamics are governed not only by an effective potential but may also contain dissipation, random forces and memory effects; the paper shows many-body memory is important for predicting collective transport and diffusion correctly.
+**Husic et al., J. Chem. Phys. 2020, Coarse graining MD with graph neural networks** [paper:husic2020-cg-gnn], [doi:10.1063/5.0026133](https://doi.org/10.1063/5.0026133).
+A transferable CG interaction model as a GNN. Validated: thermodynamic, structural. (Cited in the original
+review as Olsson et al. 2020, PMC7671749.)
 
-For solid electrolytes: if most of the host-lattice vibrations are coarse-grained away and only Li ions are kept, the influence of the host lattice on Li does not disappear. It may need to be represented through effective interactions, friction, noise or memory. Treating all Li as CG particles and training a simple CG potential is therefore unlikely to predict diffusion kinetics correctly.
+**Lyu & Lei, PRL 2023, CG MD with many-body non-Markovian memory** [paper:lyu2023-cg-memory], [doi:10.1103/PhysRevLett.131.177301](https://doi.org/10.1103/PhysRevLett.131.177301). Priority 5.
+Learns a many-body memory kernel in addition to the effective potential; the eliminated degrees of freedom
+are kept as memory and noise. Validated: transport, kinetic (diffusivity, collective transport). Extends
+CGnet by adding memory. The reason to doubt that a Li-only CG potential can predict diffusion kinetics.
 
-### C. Enhanced sampling / ML collective variables
+**Durumeric et al., Nat. Commun. 2026, Force matching with denoising** [paper:durumeric2026-force-matching-denoising], [doi:10.1038/s41467-026-70818-0](https://doi.org/10.1038/s41467-026-70818-0).
+Force matching plus denoising; far fewer atomistic samples. Validated: thermodynamic.
 
-| Paper | Contribution |
-|---|---|
-| [Tiwary & Parrinello, PRL (2013)](https://doi.org/10.1103/PhysRevLett.111.230602) | Recovering transition kinetics from metadynamics |
-| [Wang & Tiwary, J. Chem. Phys. (2021)](https://doi.org/10.1063/5.0038198) | SPIB: reaction coordinates learned from dynamical information |
-| [Mehdi et al., JCTC (2022)](https://doi.org/10.1021/acs.jctc.2c00058) | SPIB-learned CVs guide metadynamics |
-| [Weighted ensemble review (2017)](https://doi.org/10.1146/annurev-biophys-070816-033834) | Parallel trajectories with weight redistribution for efficient rare-event sampling |
+### C. Enhanced sampling
 
-The relevant line here is unsupervised or self-supervised CV learning: R(t) → (ML) s(t) → (bias) enhanced sampling, where s(t) is a low-dimensional collective variable learned from the trajectory. SPIB can learn a reaction coordinate from insufficiently sampled trajectories and use it for subsequent enhanced sampling.
+**Tiwary & Parrinello, PRL 2013, From metadynamics to dynamics** [paper:tiwary2013-metadynamics-kinetics], [doi:10.1103/PhysRevLett.111.230602](https://doi.org/10.1103/PhysRevLett.111.230602).
+Unbiased transition rates from infrequent metadynamics, under the condition that transition states stay
+unbiased. Validated: kinetic (hop rate).
 
-Two things must be kept apart: **sampling more transition events ≠ having obtained correct transition rates.** For metadynamics, recovering real kinetics requires accounting for the effect of the bias on the dynamics and the applicability conditions of the corresponding methods.
+**Wang & Tiwary, J. Chem. Phys. 2021, SPIB** [paper:wang2021-spib], [doi:10.1063/5.0038198](https://doi.org/10.1063/5.0038198).
+A reaction coordinate from time-lagged information, including from under-sampled trajectories. Validated:
+kinetic.
 
-### D. Accelerated dynamics / rare-event methods
+**Mehdi et al., JCTC 2022, SPIB-guided metadynamics** [paper:mehdi2022-spib-metadynamics], [doi:10.1021/acs.jctc.2c00058](https://doi.org/10.1021/acs.jctc.2c00058).
+SPIB coordinates used to bias metadynamics, iterated. Validated: thermodynamic, kinetic. Extends SPIB.
 
-| Paper | Contribution |
-|---|---|
-| [Voter, PRL (1997)](https://doi.org/10.1103/PhysRevLett.78.3908) | Hyperdynamics: raising the energy of metastable basins to accelerate rare transitions |
-| [Voter et al., Annual Review of Materials Research (2002)](https://doi.org/10.1146/annurev.matsci.32.112601.141541) | Systematic review of hyperdynamics, parallel replica, temperature-accelerated dynamics and on-the-fly kMC |
+**Zuckerman & Chong, Annu. Rev. Biophys. 2017, Weighted ensemble review** [paper:zuckerman2017-weighted-ensemble], [doi:10.1146/annurev-biophys-070816-033834](https://doi.org/10.1146/annurev-biophys-070816-033834).
+Weight-splitting schemes that sample rare events without biasing the dynamics; rates from weight flux.
+Validated: kinetic.
 
-These methods exploit a feature of materials dynamics: **the time a system waits in a metastable basin can be far longer than the time a transition takes.** Since most compute is spent waiting, the waiting can be skipped. The family is directly connected to activated diffusion in solids, has a much longer theoretical history than recent generative models, and provides physical constraints and baselines for ML methods.
+### D. Accelerated dynamics
 
-### E. Kinetic coarse-graining / MSM / kMC
+**Voter, PRL 1997, Hyperdynamics** [paper:voter1997-hyperdynamics], [doi:10.1103/PhysRevLett.78.3908](https://doi.org/10.1103/PhysRevLett.78.3908).
+A bias vanishing on dividing surfaces accelerates escapes with a known boost; discards the waiting time in
+basins. Validated: kinetic.
 
-Rather than learning fewer atoms, convert continuous atomic motion into discrete states and transitions: R(t) → s(t) → P(s_{t+τ} | s_t).
+**Voter, Montalenti & Germann, Annu. Rev. Mater. Res. 2002, Extending the time scale** [paper:voter2002-accelerated-md-review], [doi:10.1146/annurev.matsci.32.112601.141541](https://doi.org/10.1146/annurev.matsci.32.112601.141541).
+Review of hyperdynamics, parallel replica, temperature-accelerated dynamics and on-the-fly kMC. The
+reference and baseline against which learned accelerators are judged. Validated: kinetic.
 
-| Paper | Contribution |
-|---|---|
-| [Mardt et al., Nature Communications (2018)](https://doi.org/10.1038/s41467-017-02388-1) | VAMPnets: kinetic models of MD built with deep learning |
-| [Kahle et al., 2019](https://arxiv.org/abs/1902.02107) | Unsupervised landmark analysis: automatic identification of sites and hops from ionic MD trajectories |
-| [El-Mellouhi et al., PRB (2008)](https://doi.org/10.1103/PhysRevB.78.153202) | k-ART: off-lattice self-learning kMC that discovers events and barriers automatically |
+### E. Kinetic coarse-graining
 
-The landmark-analysis paper (already read) solves part of the problem of identifying sites and hops automatically from atomistic trajectories; it is trajectory analysis, not yet a model that predicts kinetics reliably in new environments. k-ART does not require a complete lattice event catalog: it finds transition events and barriers adaptively from the local environment, so dynamics can be modelled even with local structural distortion or off-lattice motion.
+**Mardt et al., Nat. Commun. 2018, VAMPnets** [paper:mardt2018-vampnets], [doi:10.1038/s41467-017-02388-1](https://doi.org/10.1038/s41467-017-02388-1).
+State decomposition and transition matrix end to end by maximising the VAMP score; discards motion within
+states. Validated: kinetic (transition probabilities).
+
+**Kahle, Musaelian, Marzari & Kozinsky, 2019, Unsupervised landmark analysis for jump detection** [paper:kahle2019-landmark-analysis], [arXiv:1902.02107](https://arxiv.org/abs/1902.02107) (Physical Review Materials, 2019; add the journal DOI).
+Sites and hop events from ionic MD trajectories without a predefined lattice. Validated: kinetic,
+mechanistic (residence times, hop events). Already read. Analysis, not prediction (claim below).
+
+**El-Mellouhi, Mousseau & Lewis, PRB 2008, k-ART** [paper:elmellouhi2008-kart], [doi:10.1103/PhysRevB.78.153202](https://doi.org/10.1103/PhysRevB.78.153202).
+Off-lattice self-learning kMC: events and barriers discovered from local environments, so local distortion
+and off-lattice motion are handled without a predefined event list. Validated: kinetic, mechanistic.
 
 ### F. Generative dynamics / neural simulators
 
-| Paper | Contribution |
-|---|---|
-| [Sidky et al., Chemical Science (2020)](https://doi.org/10.1039/D0SC03635H) | Molecular latent space simulators: propagate dynamics in a slow-variable space and reconstruct atomistic configurations |
-| [Swinburne, PRL (2023)](https://doi.org/10.1103/PhysRevLett.131.236101) | Compress and predict materials simulation trajectories with atomic descriptors |
-| [Nam et al., Nature Machine Intelligence (2025)](https://doi.org/10.1038/s42256-025-01125-4) | LiFlow: flow matching generates atomic displacements in crystalline materials |
+**Nam, Peng & Gomez-Bombarelli, Nat. Mach. Intell. 2025, LiFlow** [paper:nam2025-liflow], [doi:10.1038/s42256-025-01125-4](https://doi.org/10.1038/s42256-025-01125-4), [code](https://github.com/learningmatter-mit/liflow). Priority 1.
+Learns P(dR | R_t, T), the distribution of atomic displacements over a time interval given structure and
+temperature, by flow matching; a Propagator generates displacements, a Corrector repairs unphysical
+structures. Discards step-by-step integration; still needs MD trajectories to train. Trained on 25 ps MD of
+4,186 solid-electrolyte candidates at several temperatures; Li MSD on unseen compositions, Spearman about
+0.7 to 0.8; speed-up up to about 600,000x relative to AIMD. Validated: transport (MSD), structural. The
+paper closest to the question.
 
-Molecular latent space simulators (LSS) follow R_t → (encoder) z_t → (propagator) z_{t+τ} → (decoder) R_{t+τ}: learn slow variables first, propagate in latent space, then regenerate atomistic configurations; demonstrated on protein models at far lower cost than MD. LiFlow instead learns the conditional distribution of atomic displacements directly, without an explicit low-dimensional slow-variable model. Both routes are worth following; they compress physical information differently. Swinburne (2023) offers a third approach: a compressed materials state built from atomic descriptors, time-series prediction in that space, and an estimate of prediction uncertainty.
+**Sidky, Chen & Ferguson, Chem. Sci. 2020, Molecular latent space simulators** [paper:sidky2020-latent-space-simulators], [doi:10.1039/D0SC03635H](https://doi.org/10.1039/D0SC03635H). Priority 2.
+Encoder to slow latent variables, stochastic propagator there, decoder back to atoms; long trajectories of
+protein models at far lower cost than MD. Validated: kinetic, structural. Contrasts with LiFlow: explicit
+slow-variable dynamics versus a direct displacement distribution.
+
+**Swinburne, PRL 2023, Compression and prediction of materials simulation trajectories with atomic descriptors** [paper:swinburne2023-descriptor-trajectories], [doi:10.1103/PhysRevLett.131.236101](https://doi.org/10.1103/PhysRevLett.131.236101).
+A compressed descriptor-space state and its time series, with uncertainty; positions are not propagated.
+Validated: structural.
+
+**Noe, Olsson, Kohler & Wu, Science 2019, Boltzmann generators** [paper:noe2019-boltzmann-generators], [doi:10.1126/science.aaw1147](https://doi.org/10.1126/science.aaw1147).
+A normalizing flow to the Boltzmann distribution; equilibrium structures and free energies without MD.
+Discards time altogether. Validated: thermodynamic, structural. Contrasts with LiFlow: P(R) versus
+P(dR | R_t, T).
 
 ### G. Adaptive / multiscale simulation
 
-| Paper | Contribution |
-|---|---|
-| [Praprotnik et al., J. Chem. Phys. (2005)](https://doi.org/10.1063/1.2132286) | Adaptive resolution: dynamic switching between atomistic and CG representations |
+**Praprotnik, Delle Site & Kremer, J. Chem. Phys. 2005, AdResS** [paper:praprotnik2005-adress], [doi:10.1063/1.2132286](https://doi.org/10.1063/1.2132286).
+Molecules switch between atomistic and CG representations by region with momentum-conserving coupling.
+Validated: structural, thermodynamic. The event-driven analogue for electrolytes is a proposal (claim below).
 
-Classical AdResS lets molecules change resolution according to the region they are in. For solid-state batteries a different design could be considered: a simplified dynamical description while an ion sits in a stable site, switching to an atomistic MLIP near a migration bottleneck or during a collective rearrangement. This is a possible extension, not something the AdResS paper has done for solid electrolytes.
+## Level 4: claims
 
-## 4. A direction worth separating: direct generation of equilibrium configurations
+Status: `supported` or `contradicted` by papers in the graph, `contested`, `hypothesis` (the reviewer's
+judgement, no direct evidence yet), `open` (an unanswered question).
 
-**[Boltzmann generators, Noé et al., Science (2019)](https://doi.org/10.1126/science.aaw1147)** samples the equilibrium distribution directly with a generative model, giving equilibrium structures and thermodynamics without a long MD trajectory. But P(R) ≠ P(R_{t+τ} | R_t): the former is the equilibrium distribution, the latter describes dynamical transitions. A model that generates equilibrium structures perfectly need not predict a diffusion coefficient. Much current generative molecular simulation work targets equilibrium sampling rather than true time evolution.
+| Claim | Status | Evidence | About |
+|---|---|---|---|
+| A CG potential that reproduces the equilibrium distribution does not determine the time scales of the CG dynamics [claim:cg-potential-does-not-fix-time-scales] | supported | Lyu & Lei 2023; Wang & Gomez-Bombarelli 2019 | force matching, GLE memory, family B |
+| Coarse-graining away the host lattice leaves its effect on the mobile ions, to be represented as friction, noise or memory [claim:host-lattice-effects-persist] | hypothesis | (inference from Mori-Zwanzig) | family B |
+| The CG mapping can be learned jointly with the CG potential [claim:learned-cg-mapping] | supported | Wang & Gomez-Bombarelli 2019 | CG auto-encoder |
+| Sampling more transition events does not by itself give correct rates [claim:more-transitions-not-rates] | supported | Tiwary & Parrinello 2013; Zuckerman & Chong 2017 | family C, hop rate |
+| Waiting time in basins dominates, so skipping it gives large speed-ups while keeping state-to-state dynamics [claim:waiting-time-dominates] | supported | Voter 1997; Voter et al. 2002 | family D, hyperdynamics |
+| A symplectic, time-reversible long-step map need not reproduce long-time diffusion statistics [claim:symplecticity-not-sufficient-for-diffusion] | hypothesis | | action learning, diffusivity |
+| A model of P(R) does not predict P(R_{t+tau} given R_t); equilibrium generators cannot give diffusion coefficients [claim:equilibrium-sampling-is-not-dynamics] | hypothesis | | Boltzmann generator, diffusivity |
+| Agreement in MSD does not establish correct mechanisms, rates or correlated motion [claim:msd-agreement-insufficient] | open | | flow matching, MSD, migration pathway |
+| LiFlow's 600,000x is relative to AIMD, not GPU MLIP-MD [claim:liflow-speedup-is-relative-to-aimd] | supported | Nam et al. 2025 | flow matching |
+| Effective dynamics cannot be learned from short MD alone when important pathways never appear [claim:short-md-insufficient] | open | | families F, C |
+| Which degrees of freedom coarse-graining should eliminate for solid electrolytes is undetermined [claim:what-to-eliminate-is-undetermined] | open | | families B, E, F |
+| Structural and MSD agreement can coexist with wrong pathways; validation must be layered by goal [claim:validation-must-be-layered] | hypothesis | | MSD, migration pathway, hop rate |
+| Automatic site and hop detection is analysis, not a predictive kinetic model [claim:event-detection-is-not-prediction] | hypothesis | | landmark analysis |
+| An event-driven multiscale scheme would suit solid electrolytes [claim:event-driven-multiscale-for-electrolytes] | hypothesis | | family G, AdResS |
 
-## 5. What to focus on for solid-state battery research
+## Level 5: quantities
 
-| Research goal | Most relevant families | Main difficulty |
+Grouped by validation level. Each has an operational definition in the graph.
+
+| Level | Quantity | Definition |
 |---|---|---|
-| Faster, accurate diffusion coefficients | A, D, E, F | Preserving true time scales and transition rates |
-| Automatically learning migration mechanisms and pathways | C, E, F | Discovering unobserved states and transitions |
-| Larger-scale ion transport, including disorder and collective migration | B, E, F, G | Keeping local-environment dependence and inter-ion dynamical correlation |
+| structural | Radial distribution function [quantity:rdf] | Histogram of interatomic distances for a species pair, normalised by the ideal-gas expectation |
+| structural | Site occupancy [quantity:site-occupancy] | Fraction of frames in which each site holds a mobile ion |
+| thermodynamic | Free-energy difference [quantity:free-energy-difference] | -kT log of the population ratio between states or along a collective variable |
+| kinetic | Residence time [quantity:residence-time] | Mean time between arrival at a site and the next hop away |
+| kinetic | Hop rate [quantity:hop-rate] | Detected hops per mobile ion per unit time; the escape rate in rate theory |
+| kinetic | Transition probability [quantity:transition-probability] | P(state j at t+tau given state i at t), counted from trajectories |
+| transport | Mean squared displacement [quantity:msd] | Average over ions and time origins of the squared displacement at lag t |
+| transport | Diffusivity [quantity:diffusivity] | lim MSD(t) / (2 d t) over the diffusive regime |
+| transport | Correlation factor [quantity:correlation-factor] | Tracer diffusivity over the uncorrelated random-walk diffusivity with the same hop rate and length |
+| transport | Ionic conductivity [quantity:ionic-conductivity] | From the charge diffusivity (Nernst-Einstein) or the Green-Kubo current autocorrelation |
+| mechanistic | Migration pathway [quantity:migration-pathway] | The sequence of sites and the saddle region of a hop; cooperative when several ions move together |
 
-Three questions for later discussion:
+Which papers validate which quantities is in the graph as `validates` edges. The pattern it shows: the
+generative and CG papers stop at structural, thermodynamic or MSD; only the rare-event and kinetic-model
+papers report hop rates or pathways. That gap is the content of the open claims above.
 
-**Question 1: what should coarse-graining eliminate?** Options for a solid electrolyte: remove high-frequency lattice vibrations but keep atomic coordinates; remove some framework atoms and keep mobile ions with an effective environment; remove in-site vibrations and keep only occupancy and migration events; keep no explicit atoms or sites and learn continuous latent dynamics. These lose entirely different information.
+## Reading order
 
-**Question 2: can effective dynamics be learned entirely from short MD trajectories?** If an important migration pathway never appears, the model may be unable to identify it. Enhanced sampling, active exploration or physical constraints may be needed, not just larger networks.
+1. LiFlow (2025): how time evolution is learned directly; how diffusion is validated.
+2. Molecular latent space simulators (2020): learning true kinetics in a low-dimensional space.
+3. Learning the Action (2026): skipping steps while keeping the structure of the dynamics.
+4. CG auto-encoders (2019): learning a CG representation.
+5. CG MD with memory (2023): why an effective potential alone may not describe diffusion.
 
-**Question 3: how to verify that coarse-grained dynamics are correct?** More important than the model architecture. Validation should be layered by goal:
+Keep Voter 2002 as the reference for classical accelerated dynamics, and Kahle 2019 and k-ART 2008 as
+references for automatic event discovery. Three strategies cover the five papers: learn a faster integrator;
+learn a reduced representation; learn an effective stochastic dynamics.
 
-| Level | What to check |
-|---|---|
-| Structural | RDF, site occupancy, local coordination |
-| Thermodynamic | Free-energy differences, equilibrium populations |
-| Kinetic | Residence time, transition probability, hop rate |
-| Transport | MSD, diffusivity, correlation factor |
-| Mechanistic | Migration pathways, cooperative hopping, environment-dependent jumps |
+## Where this leaves the question
 
-A model with the right structural distribution, even the right MSD, can still generate wrong migration pathways. Conversely, a model that cannot reconstruct instantaneous atomic positions but recovers transition kinetics correctly may be well suited to long-time transport simulation.
-
-## 6. What to read next
-
-Not all twenty papers at once. To understand how machine learning changes the time and length scales of MD, compare these five first:
-
-| Priority | Paper | Focus |
-|---|---|---|
-| 1 | **LiFlow (2025)** | How to learn time evolution directly; how diffusion is validated |
-| 2 | **Molecular latent space simulators (2020)** | How to learn true kinetics in a low-dimensional space |
-| 3 | **Learning the Action (2026)** | How to skip time steps while keeping the structure of the dynamics |
-| 4 | **Coarse-graining auto-encoders (2019)** | How to learn a coarse-grained representation automatically |
-| 5 | **CG MD with memory (2023)** | Why learning an effective potential alone may not describe diffusion |
-
-These cover three core strategies: learn a faster integrator; learn a reduced representation; learn an effective stochastic dynamics. Keep Voter (2002) as the reference for classical accelerated dynamics, and Kahle et al. (2019) and k-ART (2008) as references for automatic event discovery and kinetic modelling.
-
-### Preliminary judgement
-
-Coarse-graining does not have to mean merging atoms into particles; time, dynamical states, or the whole transition process can be coarse-grained. For ion diffusion in solid-state batteries the key may not be how many atoms are kept, but finding an effective representation that preserves the long-time dynamical rules.
-
-- **What we know:** learned integrators, latent dynamics, kinetic state models and generative propagators already provide several acceleration routes.
-- **What is uncertain:** how much the methods differ in preserving true diffusion dynamics, handling correlated hopping, and extrapolating to unseen transitions.
-- **What decision this affects:** whether the next stage centres on atomistic trajectory prediction or on learning coarse-grained stochastic dynamics of the ions directly.
-- **Best next step:** compare families A, B, E and F in depth, focusing not on more papers but on what each method learns, what it discards, and why it accelerates.
+Known: learned integrators, latent dynamics, kinetic state models and generative propagators each give a
+route to larger scales. Uncertain: how much they differ in preserving true diffusion dynamics, handling
+correlated hopping, and extrapolating to unseen transitions; none of the reviewed generative papers reports
+hop rates or pathways. Decision this affects: whether the next stage centres on atomistic trajectory
+prediction or on learning coarse-grained stochastic dynamics of the ions directly. Next step: compare families
+A, B, E and F on what each learns, what it discards, and why it accelerates, rather than adding papers.

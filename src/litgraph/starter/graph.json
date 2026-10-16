@@ -1,9 +1,9 @@
 {
-  "schema": "1.0",
+  "schema": "2.0",
   "title": "{{TITLE}}",
-  "description": "",
+  "description": "The research question this graph serves, in one or two sentences.",
   "nodes": [
-    {"id": "question:main", "type": "question", "label": "What is the question this graph is about?", "summary": "Edit this node, or ask the agent to build the graph from your notes with `litgraph extract notes/*.md`.", "status": "seed", "source": "manual"}
+    {"id": "family:example", "type": "family", "label": "A. An example method family", "summary": "Keeps: what this family learns or keeps. Discards: what it gives up. Still computes: what it still has to run. Replace this node, or build the graph from your notes with `litgraph extract notes/*.md`.", "relevance": 3, "status": "seed", "source": "manual"}
   ],
   "edges": []
 }

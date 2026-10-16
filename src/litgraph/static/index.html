@@ -19,7 +19,7 @@
           <label class="search-box">
             <span class="sr-only">Find a node</span>
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="m16 16 4 4"></path></svg>
-            <input id="graph-search" type="search" placeholder="Find a paper, method or concept" autocomplete="off" />
+            <input id="graph-search" type="search" placeholder="Find a family, technique, paper, claim or quantity" autocomplete="off" />
             <kbd>⌘ K</kbd>
           </label>
           <div class="graph-actions">
@@ -33,7 +33,7 @@
         <div id="search-results" class="search-results" hidden></div>
 
         <div id="graph-stage" class="graph-stage">
-          <canvas id="graph-canvas" role="img" aria-label="Knowledge graph. Use search to find a node."></canvas>
+          <canvas id="graph-canvas" role="img" aria-label="Knowledge graph in five levels. Use search to find a node."></canvas>
           <div id="graph-hint" class="graph-hint"><span></span> Drag · scroll to zoom · click a node</div>
 
           <article id="node-card" class="node-card" hidden>
@@ -52,7 +52,7 @@
             </div>
           </article>
 
-          <div id="legend" class="legend" aria-label="Show or hide kinds of nodes"></div>
+          <div id="legend" class="legend" aria-label="Levels to show"></div>
         </div>
       </section>
 
@@ -84,16 +84,12 @@
         <form method="dialog" id="edit-form">
           <h2 id="edit-title">Edit node</h2>
           <div class="field-grid">
-            <label>Label <input id="edit-label" required autocomplete="off" /></label>
-            <label>Type <select id="edit-type"></select></label>
+            <label class="wide">Label <input id="edit-label" required autocomplete="off" /></label>
+            <label>Level <select id="edit-type"></select></label>
+            <label>Aliases (comma separated) <input id="edit-aliases" autocomplete="off" /></label>
             <label class="wide">Summary <textarea id="edit-summary" rows="3"></textarea></label>
-            <label>Year <input id="edit-year" type="number" min="1800" max="2100" /></label>
-            <label>Venue <input id="edit-venue" autocomplete="off" /></label>
-            <label class="wide">Authors <input id="edit-authors" autocomplete="off" /></label>
-            <label>DOI <input id="edit-doi" autocomplete="off" /></label>
-            <label>URL <input id="edit-url" autocomplete="off" /></label>
-            <label class="wide">Aliases (comma separated) <input id="edit-aliases" autocomplete="off" /></label>
           </div>
+          <div id="edit-type-fields" class="field-grid type-fields"></div>
           <div id="edit-links" class="edit-links">
             <b>Links</b>
             <ul id="edit-link-list"></ul>

@@ -7,9 +7,11 @@ molecular dynamics. The question behind this graph: can we learn an efficient re
 model from atomistic simulations that predicts accurately at larger spatial and temporal scales? The target
 quantities are diffusivity, ionic conductivity, hop rates, migration pathways and correlated migration.
 
-The seed of the graph is a literature review (notes/md_coarse_graining_review.md) that sorts the field into
-seven method families, A to G. Keep that classification when adding papers: every paper should be
-`contains`-linked from one family, and linked with `uses` to the concepts it relies on.
+The seed of the graph is a literature review (notes/md_coarse_graining_review.md) written in the five-level
+schema (docs/GRAPH_SCHEMA.md): seven method families A to G, techniques, papers, claims, quantities. Keep
+the families when adding papers: a paper is `contains`-linked from exactly one family and `uses` the
+techniques it applies. A paper's `learns`, `discards` and `validated_at` fields are what I compare across
+families; fill them from the paper, not from its abstract's claims.
 
 ## Terminology
 
@@ -22,11 +24,15 @@ seven method families, A to G. Keep that classification when adding papers: ever
 
 ## What belongs in the graph
 
-- A paper: only with title, authors, year and venue from a search result or from me. Summary: what it learns,
-  what it assumes or discards, what it validated against (which level of the validation hierarchy).
-- A concept or method: one that at least two papers use, or that I ask for.
-- An edge: a relation the paper itself states (extends, contrasts with, uses), or that I confirm. Give it a
-  short label in the paper's own terms.
+- A paper: only with title, authors, year and venue from a search result or from me; `validated_at` lists
+  only the levels the paper reports evidence for (structural, thermodynamic, kinetic, transport, mechanistic).
+- A technique: a method a paper applies that you could implement or cite independently of that paper.
+- A claim: a falsifiable statement about methods or quantities, with the papers that bear on it. My
+  judgements are claims with status hypothesis; unanswered questions are claims with status open.
+- A quantity: an observable a paper validates against, with a one-line operational definition (object,
+  data, computation) and its level; MSD, diffusivity, hop rate, migration pathway are the ones I care about.
+- An edge: a relation the paper itself states, or that I confirm; `contrasts` and `relates` carry a label in
+  the paper's own terms.
 - Do not add application-specific papers (one material's conductivity) unless they test a method family.
 
 ## Answers
